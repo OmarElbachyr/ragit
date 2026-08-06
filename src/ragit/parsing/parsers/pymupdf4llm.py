@@ -19,13 +19,23 @@ from ragit.parsing.models import (
 from ragit.parsing.registry import register_parser
 
 
-# Users may currently configure only this option.
-_ALLOWED_OPTIONS = {
-    "use_ocr",
+_MARKDOWN_DEFAULTS: dict[str, Any] = {
+    "header": True,
+    "footer": True,
+    "force_text": True,
+    "show_progress": True,
+    "ocr_dpi": 300,
+    "table_strategy": "lines_strict",
 }
 
+_TEXT_DEFAULTS: dict[str, Any] = {
+    "header": True,
+    "footer": True,
+    "force_text": True,
+    "show_progress": True,
+    "ocr_dpi": 400,
+}
 
-# PyMuPDF4LLM uses Tesseract language codes.
 _LANGUAGE_CODES = {
     "en": "eng",
     "eng": "eng",
@@ -41,56 +51,6 @@ _LANGUAGE_CODES = {
     "lb": "ltz",
     "ltz": "ltz",
     "luxembourgish": "ltz",
-    "es": "spa",
-    "spa": "spa",
-    "spanish": "spa",
-    "ar": "ara",
-    "ara": "ara",
-    "arabic": "ara",
-}
-
-
-# Explicit RAGit defaults for Markdown extraction.
-_MARKDOWN_DEFAULTS: dict[str, Any] = {
-    "detect_bg_color": True,
-    "dpi": 150,
-    "embed_images": False,
-    "extract_words": False,
-    "filename": None,
-    "fontsize_limit": 3,
-    "footer": True,
-    "force_text": True,
-    "graphics_limit": None,
-    "hdr_info": None,
-    "header": True,
-    "ignore_alpha": False,
-    "ignore_code": False,
-    "ignore_graphics": False,
-    "ignore_images": False,
-    "image_format": "png",
-    "image_path": "",
-    "image_size_limit": 0.05,
-    "margins": 0,
-    "ocr_dpi": 300,
-    "ocr_function": None,
-    "page_height": None,
-    "page_separators": False,
-    "page_width": 612,
-    "show_progress": True,
-    "table_strategy": "lines_strict",
-    "use_glyphs": False,
-    "write_images": False,
-}
-
-
-# Explicit RAGit defaults for plain-text extraction.
-_TEXT_DEFAULTS: dict[str, Any] = {
-    "footer": True,
-    "force_text": True,
-    "header": True,
-    "ignore_code": False,
-    "ocr_dpi": 400,
-    "show_progress": True,
 }
 
 
@@ -103,28 +63,64 @@ class PyMuPDF4LLMParser(BaseParser):
         {"text", "markdown"}
     )
 
+    supported_options: ClassVar[frozenset[str]] = frozenset(
+        {"use_ocr"}
+    )
+
+    supports_language: ClassVar[bool] = True
     default_language: ClassVar[str] = "eng"
 
     @classmethod
     def validate_config(cls, config: ParsingConfig) -> None:
-        """Validate the RAGit parser configuration."""
+        """Validate PyMuPDF4LLM-specific configuration."""
         super().validate_config(config)
-
-        unsupported_options = set(config.options) - _ALLOWED_OPTIONS
-
-        if unsupported_options:
-            raise ParsingConfigurationError(
-                f"Unsupported options for {cls.parser_name!r}: "
-                f"{sorted(unsupported_options)}. "
-                "Currently supported options: ['use_ocr']."
-            )
 
         use_ocr = config.options.get("use_ocr", False)
 
         if not isinstance(use_ocr, bool):
             raise ParsingConfigurationError(
-                "The 'use_ocr' option must be a boolean."
+                "Option 'use_ocr' must be a Boolean."
             )
+
+    @classmethod
+    def _normalize_language(
+        cls,
+        language: str | None,
+    ) -> str:
+        """Convert document language metadata to a Tesseract code."""
+        if not language:
+            return cls.default_language
+
+        normalized = language.strip().lower()
+
+        return _LANGUAGE_CODES.get(normalized, normalized)
+
+    @classmethod
+    def _effective_options(
+        cls,
+        document: Document,
+        config: ParsingConfig,
+    ) -> dict[str, Any]:
+        """Build the complete explicit PyMuPDF4LLM configuration."""
+        use_ocr = config.options.get("use_ocr", False)
+
+        document_language = cls.resolve_document_language(document)
+        ocr_language = cls._normalize_language(document_language)
+
+        defaults = (
+            _MARKDOWN_DEFAULTS
+            if config.output_format == "markdown"
+            else _TEXT_DEFAULTS
+        )
+
+        return {
+            **defaults,
+            "parsing_mode": "ocr" if use_ocr else "standard",
+            "use_ocr": use_ocr,
+            "use_vlm": False,
+            "force_ocr": use_ocr,
+            "ocr_language": ocr_language,
+        }
 
     def parse_document(
         self,
@@ -132,11 +128,11 @@ class PyMuPDF4LLMParser(BaseParser):
         source_pages: Sequence[Page],
         config: ParsingConfig,
     ) -> list[ParsedPage]:
-        """Parse one PDF into one normalized result per corpus page."""
+        """Parse one PDF and return one normalized page per corpus page."""
         self.validate_config(config)
         self._validate_source_pages(document, source_pages)
 
-        effective_options = self._build_effective_options(
+        effective_options = self._effective_options(
             document=document,
             config=config,
         )
@@ -189,67 +185,6 @@ class PyMuPDF4LLMParser(BaseParser):
 
         return parsed_pages
 
-    @classmethod
-    def _build_effective_options(
-        cls,
-        *,
-        document: Document,
-        config: ParsingConfig,
-    ) -> dict[str, Any]:
-        """Build the complete explicit backend configuration."""
-        use_ocr = config.options.get("use_ocr", False)
-
-        language = cls._resolve_document_language(document)
-
-        if config.output_format == "markdown":
-            defaults = _MARKDOWN_DEFAULTS
-        else:
-            defaults = _TEXT_DEFAULTS
-
-        return {
-            **defaults,
-            # RAGit convention:
-            # use_ocr=True means OCR every page.
-            "use_ocr": use_ocr,
-            "force_ocr": use_ocr,
-            "ocr_language": language,
-        }
-
-    @classmethod
-    def _resolve_document_language(
-        cls,
-        document: Document,
-    ) -> str:
-        """Resolve and normalize the document OCR language.
-
-        Supported document metadata fields, in priority order:
-
-        1. language
-        2. doc_language
-        3. langauge, for compatibility with the misspelled field
-
-        Missing language metadata falls back to English.
-        """
-        raw_language: str | None = None
-
-        for field_name in (
-            "language",
-            "doc_language",
-            "langauge",
-        ):
-            value = getattr(document, field_name, None)
-
-            if isinstance(value, str) and value.strip():
-                raw_language = value.strip()
-                break
-
-        if raw_language is None:
-            return cls.default_language
-
-        normalized = raw_language.lower()
-
-        return _LANGUAGE_CODES.get(normalized, normalized)
-
     def _parse_page(
         self,
         *,
@@ -283,8 +218,8 @@ class PyMuPDF4LLMParser(BaseParser):
                     metadata=metadata,
                     error_type="MissingPageOutput",
                     error_message=(
-                        "PyMuPDF4LLM returned no output for zero-based "
-                        f"page {source_page.page_number}."
+                        "PyMuPDF4LLM returned no output for zero-based page "
+                        f"{source_page.page_number}."
                     ),
                 )
 
@@ -310,7 +245,7 @@ class PyMuPDF4LLMParser(BaseParser):
                     metadata=metadata,
                     error_type="InvalidPageOutput",
                     error_message=(
-                        "PyMuPDF4LLM output does not contain string content."
+                        "PyMuPDF4LLM page output does not contain string text."
                     ),
                 )
 
@@ -353,22 +288,32 @@ class PyMuPDF4LLMParser(BaseParser):
         output_format: ContentFormat,
         effective_options: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Call the native PyMuPDF4LLM output method."""
-        options = {
-            **effective_options,
-            "pages": [page_number],
-            "page_chunks": True,
+        """Call the native PyMuPDF4LLM export method."""
+        backend_options = {
+            key: value
+            for key, value in effective_options.items()
+            if key not in {
+                "parsing_mode",
+                "use_vlm",
+            }
         }
+
+        backend_options.update(
+            {
+                "pages": [page_number],
+                "page_chunks": True,
+            }
+        )
 
         if output_format == "markdown":
             result = backend.to_markdown(
                 str(pdf_path),
-                **options,
+                **backend_options,
             )
         else:
             result = backend.to_text(
                 str(pdf_path),
-                **options,
+                **backend_options,
             )
 
         if not isinstance(result, list):
@@ -407,7 +352,7 @@ class PyMuPDF4LLMParser(BaseParser):
         document: Document,
         source_pages: Sequence[Page],
     ) -> None:
-        """Validate that source pages belong to the requested document."""
+        """Validate that all source pages belong to the document."""
         seen_page_ids: set[int] = set()
         seen_page_numbers: set[int] = set()
 
@@ -434,7 +379,7 @@ class PyMuPDF4LLMParser(BaseParser):
 
 
 def _load_backend() -> ModuleType:
-    """Import PyMuPDF4LLM only when the adapter is used."""
+    """Import PyMuPDF4LLM only when this adapter is used."""
     try:
         import pymupdf4llm
     except ImportError as error:
@@ -449,7 +394,7 @@ def _load_backend() -> ModuleType:
 def _get_parser_version(
     backend: ModuleType,
 ) -> str | None:
-    """Read the installed PyMuPDF4LLM version."""
+    """Return the installed PyMuPDF4LLM version."""
     version = getattr(backend, "version", None)
 
     if callable(version):

@@ -4,8 +4,7 @@ from collections import Counter
 from pathlib import Path
 
 from ragit.data import initialize_collection
-from ragit.parsing import ParsingConfig, save_parsing_result
-from ragit.parsing.parsers import PyMuPDF4LLMParser
+from ragit.parsing import ParsingConfig, parse_document
 
 
 DATA_PATH = Path("data/vidore_v3_finance_en")
@@ -19,13 +18,9 @@ collection = initialize_collection(
 
 document = collection.documents[0]
 
-source_pages = sorted(
-    [
-        page
-        for page in collection.pages
-        if page.doc_id == document.doc_id
-    ],
-    key=lambda page: page.page_number,
+document_page_count = sum(
+    page.doc_id == document.doc_id
+    for page in collection.pages
 )
 
 config = ParsingConfig(
@@ -36,22 +31,22 @@ config = ParsingConfig(
     },
 )
 
-pages = PyMuPDF4LLMParser().parse_document(
-    document=document,
-    source_pages=source_pages,
+print(f"Document: {document.file_name}")
+print(f"PDF path: {document.local_path}")
+print(f"Pages:    {document_page_count}")
+print("Starting parsing...\n")
+
+result = parse_document(
+    collection=collection,
+    doc_id=document.doc_id,
     config=config,
+    overwrite=False,
 )
 
-result = save_parsing_result(
-    pdfs_path=PDFS_PATH,
-    config=config,
-    pages=pages,
-    replace=True,
-)
-
+pages = result.pages
 statuses = Counter(page.status.value for page in pages)
 
-print(f"Document: {document.file_name}")
+print("\nParsing completed")
 print(f"Output:   {result.output_path}")
 print(f"Pages:    {len(pages)}")
 print(f"Success:  {statuses['success']}")
@@ -59,10 +54,34 @@ print(f"Empty:    {statuses['empty']}")
 print(f"Failed:   {statuses['failed']}")
 
 successful_page = next(
-    (page for page in pages if page.status.value == "success"),
+    (
+        page
+        for page in pages
+        if page.status.value == "success"
+    ),
     None,
 )
 
 if successful_page:
     print("\nContent preview:")
     print(successful_page.content)
+
+failed_page = next(
+    (
+        page
+        for page in pages
+        if page.status.value == "failed"
+    ),
+    None,
+)
+
+if failed_page:
+    print("\nFirst error:")
+    print(
+        f"Type:    "
+        f"{failed_page.metadata.get('error_type')}"
+    )
+    print(
+        f"Message: "
+        f"{failed_page.metadata.get('error_message')}"
+    )

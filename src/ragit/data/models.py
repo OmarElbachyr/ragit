@@ -1,4 +1,4 @@
-"""Data models for canonical ragit collections."""
+"""Data models for canonical RAGit collections."""
 
 from pathlib import Path
 from typing import Any
@@ -55,9 +55,12 @@ class Qrel(BaseModel):
 
 
 class Collection(BaseModel):
-    """A validated canonical ragit collection."""
+    """A validated canonical RAGit collection."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+    )
 
     pdfs_path: Path
     ragit_path: Path

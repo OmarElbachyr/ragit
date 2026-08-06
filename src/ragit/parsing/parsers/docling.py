@@ -19,13 +19,6 @@ from ragit.parsing.models import (
 from ragit.parsing.registry import register_parser
 
 
-# Users currently configure only whether OCR is enabled.
-_ALLOWED_OPTIONS = {
-    "use_ocr",
-}
-
-
-# EasyOCR uses ISO 639-1-style language codes.
 _LANGUAGE_CODES = {
     "en": "en",
     "eng": "en",
@@ -44,8 +37,10 @@ _LANGUAGE_CODES = {
 }
 
 
-# Explicit RAGit defaults for Docling.
-_DOCLING_DEFAULTS: dict[str, Any] = {
+_STANDARD_DEFAULTS: dict[str, Any] = {
+    "parsing_mode": "standard",
+    "use_ocr": False,
+    "use_vlm": False,
     "do_ocr": False,
     "ocr_mode": "default",
     "ocr_language": ["en"],
@@ -59,6 +54,18 @@ _DOCLING_DEFAULTS: dict[str, Any] = {
 }
 
 
+_VLM_DEFAULTS: dict[str, Any] = {
+    "parsing_mode": "vlm",
+    "use_ocr": False,
+    "use_vlm": True,
+    "vlm_model": "granite_docling",
+    "vlm_engine": "auto_inline",
+    "vlm_scale": 2.0,
+    "vlm_batch_size": 1,
+    "force_backend_text": False,
+}
+
+
 class DoclingParser(BaseParser):
     """Parse complete PDF documents using Docling."""
 
@@ -68,28 +75,37 @@ class DoclingParser(BaseParser):
         {"text", "markdown"}
     )
 
+    supported_options: ClassVar[frozenset[str]] = frozenset(
+        {
+            "use_ocr",
+            "use_vlm",
+        }
+    )
+
     supports_language: ClassVar[bool] = True
     default_language: ClassVar[str] = "en"
 
     @classmethod
     def validate_config(cls, config: ParsingConfig) -> None:
-        """Validate output format and user options."""
+        """Validate Docling-specific configuration."""
         super().validate_config(config)
 
-        unsupported_options = set(config.options) - _ALLOWED_OPTIONS
-
-        if unsupported_options:
-            raise ParsingConfigurationError(
-                f"Unsupported options for {cls.parser_name!r}: "
-                f"{sorted(unsupported_options)}. "
-                f"Supported options: {sorted(_ALLOWED_OPTIONS)}."
-            )
-
         use_ocr = config.options.get("use_ocr", False)
+        use_vlm = config.options.get("use_vlm", False)
 
         if not isinstance(use_ocr, bool):
             raise ParsingConfigurationError(
-                "The 'use_ocr' option must be a boolean."
+                "Option 'use_ocr' must be a Boolean."
+            )
+
+        if not isinstance(use_vlm, bool):
+            raise ParsingConfigurationError(
+                "Option 'use_vlm' must be a Boolean."
+            )
+
+        if use_ocr and use_vlm:
+            raise ParsingConfigurationError(
+                "Options 'use_ocr' and 'use_vlm' are mutually exclusive."
             )
 
     @classmethod
@@ -97,7 +113,7 @@ class DoclingParser(BaseParser):
         cls,
         language: str | None,
     ) -> str:
-        """Convert document metadata language to an EasyOCR code."""
+        """Convert document-language metadata to an EasyOCR code."""
         if not language:
             return cls.default_language
 
@@ -106,22 +122,55 @@ class DoclingParser(BaseParser):
         return _LANGUAGE_CODES.get(normalized, normalized)
 
     @classmethod
+    def _resolve_parsing_mode(
+        cls,
+        config: ParsingConfig,
+    ) -> str:
+        """Resolve standard, OCR, or VLM mode."""
+        use_ocr = config.options.get("use_ocr", False)
+        use_vlm = config.options.get("use_vlm", False)
+
+        if use_vlm:
+            return "vlm"
+
+        if use_ocr:
+            return "ocr"
+
+        return "standard"
+
+    @classmethod
     def _effective_options(
         cls,
         document: Document,
         config: ParsingConfig,
     ) -> dict[str, Any]:
         """Build the complete explicit Docling configuration."""
-        use_ocr = config.options.get("use_ocr", False)
+        parsing_mode = cls._resolve_parsing_mode(config)
+
+        if parsing_mode == "vlm":
+            return dict(_VLM_DEFAULTS)
 
         document_language = cls.resolve_document_language(document)
-        ocr_language = cls._normalize_language(document_language)
+
+        ocr_language = cls._normalize_language(
+            document_language
+        )
+
+        use_ocr = parsing_mode == "ocr"
 
         return {
-            **_DOCLING_DEFAULTS,
+            **_STANDARD_DEFAULTS,
+            "parsing_mode": parsing_mode,
+            "use_ocr": use_ocr,
+            "use_vlm": False,
             "do_ocr": use_ocr,
-            # RAGit convention: use_ocr=True means OCR every page.
-            "ocr_mode": "full_page" if use_ocr else "default",
+            # RAGit convention:
+            # use_ocr=True means OCR every page.
+            "ocr_mode": (
+                "full_page"
+                if use_ocr
+                else "default"
+            ),
             "ocr_language": [ocr_language],
         }
 
@@ -133,7 +182,10 @@ class DoclingParser(BaseParser):
     ) -> list[ParsedPage]:
         """Parse one PDF and return one record per corpus page."""
         self.validate_config(config)
-        self._validate_source_pages(document, source_pages)
+        self._validate_source_pages(
+            document,
+            source_pages,
+        )
 
         effective_options = self._effective_options(
             document=document,
@@ -148,7 +200,9 @@ class DoclingParser(BaseParser):
                 source_pages=source_pages,
                 config=config,
                 error_type="FileNotFoundError",
-                error_message=f"PDF file does not exist: {pdf_path}",
+                error_message=(
+                    f"PDF file does not exist: {pdf_path}"
+                ),
                 metadata={
                     "parser_version": parser_version,
                     "parser_options": effective_options,
@@ -156,8 +210,14 @@ class DoclingParser(BaseParser):
             )
 
         try:
-            converter = _build_converter(effective_options)
-            conversion_result = converter.convert(str(pdf_path))
+            converter = _build_converter(
+                effective_options
+            )
+
+            conversion_result = converter.convert(
+                str(pdf_path)
+            )
+
             docling_document = conversion_result.document
 
             if docling_document is None:
@@ -204,22 +264,28 @@ class DoclingParser(BaseParser):
         parser_version: str | None,
         effective_options: dict[str, Any],
     ) -> ParsedPage:
-        """Export one normalized page from the converted document."""
+        """Export one normalized page from a Docling document."""
         metadata = {
             "parser_name": self.parser_name,
             "parser_version": parser_version,
             "parser_options": effective_options,
         }
 
-        # Docling uses one-based page numbers.
-        docling_page_number = source_page.page_number + 1
+        # Docling page filtering is one-based.
+        docling_page_number = (
+            source_page.page_number + 1
+        )
 
         try:
             content = self._native_page_export(
                 docling_document=docling_document,
-                docling_page_number=docling_page_number,
+                docling_page_number=(
+                    docling_page_number
+                ),
                 output_format=config.output_format,
-                use_ocr=effective_options["do_ocr"],
+                parsing_mode=effective_options[
+                    "parsing_mode"
+                ],
             )
 
             if not isinstance(content, str):
@@ -229,8 +295,9 @@ class DoclingParser(BaseParser):
                     metadata=metadata,
                     error_type="MissingPageOutput",
                     error_message=(
-                        "Docling returned no string output for "
-                        f"one-based page {docling_page_number}."
+                        "Docling returned no string output "
+                        f"for one-based page "
+                        f"{docling_page_number}."
                     ),
                 )
 
@@ -238,9 +305,13 @@ class DoclingParser(BaseParser):
                 return ParsedPage(
                     page_id=source_page.page_id,
                     doc_id=source_page.doc_id,
-                    page_number=source_page.page_number,
+                    page_number=(
+                        source_page.page_number
+                    ),
                     content="",
-                    content_format=config.output_format,
+                    content_format=(
+                        config.output_format
+                    ),
                     status=PageStatus.EMPTY,
                     metadata=metadata,
                 )
@@ -270,18 +341,26 @@ class DoclingParser(BaseParser):
         docling_document: Any,
         docling_page_number: int,
         output_format: ContentFormat,
-        use_ocr: bool,
+        parsing_mode: str,
     ) -> str:
         """Use Docling's native page export method."""
+        # Full-page OCR output may be stored below
+        # a picture item.
+        traverse_pictures = parsing_mode == "ocr"
+
         if output_format == "markdown":
-            return docling_document.export_to_markdown(
-                page_no=docling_page_number,
-                traverse_pictures=use_ocr,
+            return (
+                docling_document.export_to_markdown(
+                    page_no=docling_page_number,
+                    traverse_pictures=(
+                        traverse_pictures
+                    ),
+                )
             )
 
         return docling_document.export_to_text(
             page_no=docling_page_number,
-            traverse_pictures=use_ocr,
+            traverse_pictures=traverse_pictures,
         )
 
     @staticmethod
@@ -320,31 +399,56 @@ class DoclingParser(BaseParser):
         for page in source_pages:
             if page.doc_id != document.doc_id:
                 raise ParsingConfigurationError(
-                    f"Page {page.page_id} belongs to document "
-                    f"{page.doc_id!r}, not {document.doc_id!r}."
+                    f"Page {page.page_id} belongs "
+                    f"to document {page.doc_id!r}, "
+                    f"not {document.doc_id!r}."
                 )
 
             if page.page_id in seen_page_ids:
                 raise ParsingConfigurationError(
-                    f"Duplicate source page_id: {page.page_id}"
+                    "Duplicate source page_id: "
+                    f"{page.page_id}"
                 )
 
             if page.page_number in seen_page_numbers:
                 raise ParsingConfigurationError(
-                    f"Duplicate page_number for {document.doc_id!r}: "
+                    "Duplicate page_number for "
+                    f"{document.doc_id!r}: "
                     f"{page.page_number}"
                 )
 
             seen_page_ids.add(page.page_id)
-            seen_page_numbers.add(page.page_number)
+            seen_page_numbers.add(
+                page.page_number
+            )
 
 
 def _build_converter(
     effective_options: dict[str, Any],
 ) -> Any:
-    """Create a Docling converter from explicit RAGit options."""
+    """Build the selected Docling converter."""
+    parsing_mode = effective_options[
+        "parsing_mode"
+    ]
+
+    if parsing_mode == "vlm":
+        return _build_vlm_converter(
+            effective_options
+        )
+
+    return _build_standard_converter(
+        effective_options
+    )
+
+
+def _build_standard_converter(
+    effective_options: dict[str, Any],
+) -> Any:
+    """Build Docling's standard or OCR converter."""
     try:
-        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.base_models import (
+            InputFormat,
+        )
         from docling.datamodel.pipeline_options import (
             EasyOcrOptions,
             OcrMode,
@@ -357,8 +461,8 @@ def _build_converter(
         )
     except ImportError as error:
         raise ImportError(
-            "Docling is required for the 'docling' parser. "
-            "Install the RAGit Docling parser dependencies."
+            "Docling is required for the "
+            "'docling' parser."
         ) from error
 
     ocr_mode = (
@@ -381,14 +485,20 @@ def _build_converter(
         do_picture_description=effective_options[
             "do_picture_description"
         ],
-        do_picture_classification=effective_options[
-            "do_picture_classification"
-        ],
+        do_picture_classification=(
+            effective_options[
+                "do_picture_classification"
+            ]
+        ),
     )
 
-    pipeline_options.ocr_options = EasyOcrOptions(
-        mode=ocr_mode,
-        lang=effective_options["ocr_language"],
+    pipeline_options.ocr_options = (
+        EasyOcrOptions(
+            mode=ocr_mode,
+            lang=effective_options[
+                "ocr_language"
+            ],
+        )
     )
 
     pipeline_options.table_structure_options.mode = (
@@ -396,13 +506,58 @@ def _build_converter(
     )
 
     pipeline_options.table_structure_options.do_cell_matching = (
-        effective_options["do_cell_matching"]
+        effective_options[
+            "do_cell_matching"
+        ]
     )
 
     return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
-                pipeline_options=pipeline_options
+                pipeline_options=pipeline_options,
+            )
+        }
+    )
+
+
+def _build_vlm_converter(
+    effective_options: dict[str, Any],
+) -> Any:
+    """Build Docling's separate VLM converter."""
+    try:
+        from docling.datamodel.base_models import (
+            InputFormat,
+        )
+        from docling.datamodel.pipeline_options import (
+            VlmConvertOptions,
+            VlmPipelineOptions,
+        )
+        from docling.document_converter import (
+            DocumentConverter,
+            PdfFormatOption,
+        )
+        from docling.pipeline.vlm_pipeline import (
+            VlmPipeline,
+        )
+    except ImportError as error:
+        raise ImportError(
+            "The installed Docling version does "
+            "not provide the required VLM pipeline."
+        ) from error
+
+    vlm_options = VlmConvertOptions.from_preset(
+        effective_options["vlm_model"]
+    )
+
+    pipeline_options = VlmPipelineOptions(
+        vlm_options=vlm_options,
+    )
+
+    return DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(
+                pipeline_cls=VlmPipeline,
+                pipeline_options=pipeline_options,
             )
         }
     )

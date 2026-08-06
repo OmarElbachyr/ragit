@@ -1,10 +1,11 @@
-"""Initialization and loading of canonical ragit collections."""
+"""Initialization and loading of canonical RAGit collections."""
 
 import csv
 import json
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -37,7 +38,7 @@ def initialize_collection(
     qrels_path: str | Path | None = None,
     extract_metadata: bool = False,
 ) -> Collection:
-    """Initialize, validate, and load a canonical ragit collection.
+    """Initialize, validate, and load a canonical RAGit collection.
 
     Explicitly supplied files replace their canonical copies under
     ``<pdfs_path>/.ragit/``.
@@ -89,7 +90,7 @@ def initialize_collection(
             destination=canonical_qrels_path,
         )
 
-    # Generate only the missing collection files.
+    # Generate only missing collection files.
     corpus_missing = not canonical_corpus_path.exists()
     metadata_missing = not canonical_metadata_path.exists()
 
@@ -131,9 +132,10 @@ def initialize_collection(
 def load_collection(
     pdfs_path: str | Path,
 ) -> Collection:
-    """Load and validate an initialized ragit collection."""
+    """Load and validate an initialized RAGit collection."""
     pdfs_path = Path(pdfs_path)
     pdf_files = validate_pdf_directory(pdfs_path)
+
     ragit_path = pdfs_path / ".ragit"
 
     corpus_path = ragit_path / CORPUS_FILE
@@ -204,7 +206,7 @@ def create_corpus(
     page_counts: dict[str, int],
 ) -> list[Page]:
     """Create deterministic page records for raw PDF collections."""
-    pages = []
+    pages: list[Page] = []
     page_id = 0
 
     for pdf_path in pdf_files:
@@ -227,7 +229,7 @@ def read_jsonl(
     path: Path,
 ) -> list[dict[str, Any]]:
     """Read JSON Lines records."""
-    records = []
+    records: list[dict[str, Any]] = []
 
     with path.open("r", encoding="utf-8") as file:
         for line_number, line in enumerate(file, start=1):
@@ -257,11 +259,15 @@ def read_qrels(
     path: Path,
 ) -> list[Qrel]:
     """Read canonical page-level qrels."""
-    qrels = []
+    qrels: list[Qrel] = []
 
     with path.open("r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file, delimiter="\t")
-        required_columns = {"query_id", "page_id", "score"}
+        required_columns = {
+            "query_id",
+            "page_id",
+            "score",
+        }
 
         if reader.fieldnames is None:
             raise CollectionValidationError(
@@ -299,12 +305,21 @@ def write_jsonl(
     records: Iterable[dict[str, Any]],
 ) -> None:
     """Write JSON Lines records atomically."""
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    temporary_path = path.with_suffix(
+        path.suffix + ".tmp"
+    )
 
-    with temporary_path.open("w", encoding="utf-8") as file:
+    with temporary_path.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
         for record in records:
             file.write(
-                json.dumps(record, ensure_ascii=False) + "\n"
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                )
+                + "\n"
             )
 
     temporary_path.replace(path)
@@ -328,4 +343,7 @@ def copy_file(
     if source.resolve() == destination.resolve():
         return
 
-    shutil.copyfile(source, destination)
+    shutil.copyfile(
+        source,
+        destination,
+    )

@@ -18,18 +18,16 @@ class BaseParser(ABC):
     """Base contract implemented by every parser adapter.
 
     A parser receives one complete PDF document and its known source pages.
-    It must return exactly one normalized ParsedPage per source page.
+    It must return one normalized ParsedPage for every expected source page.
     """
 
     parser_name: ClassVar[str]
     supported_output_formats: ClassVar[frozenset[ContentFormat]]
+    supported_options: ClassVar[frozenset[str]] = frozenset()
 
-    # Override these only in parsers that support a language parameter.
     supports_language: ClassVar[bool] = False
     default_language: ClassVar[str | None] = None
 
-    # "langauge" is temporarily supported for backward compatibility
-    # with incorrectly named metadata fields.
     language_metadata_fields: ClassVar[tuple[str, ...]] = (
         "language",
         "doc_language",
@@ -37,11 +35,40 @@ class BaseParser(ABC):
     )
 
     @classmethod
+    def validate_config(cls, config: ParsingConfig) -> None:
+        """Validate common parser configuration requirements."""
+        if config.parser_name != cls.parser_name:
+            raise ParsingConfigurationError(
+                f"Configuration targets parser {config.parser_name!r}, "
+                f"but this parser is {cls.parser_name!r}."
+            )
+
+        if config.output_format not in cls.supported_output_formats:
+            supported_formats = sorted(cls.supported_output_formats)
+
+            raise ParsingConfigurationError(
+                f"Parser {cls.parser_name!r} does not support output format "
+                f"{config.output_format!r}. "
+                f"Supported formats: {supported_formats}."
+            )
+
+        unsupported_options = (
+            set(config.options) - set(cls.supported_options)
+        )
+
+        if unsupported_options:
+            raise ParsingConfigurationError(
+                f"Unsupported options for parser {cls.parser_name!r}: "
+                f"{sorted(unsupported_options)}. "
+                f"Supported options: {sorted(cls.supported_options)}."
+            )
+
+    @classmethod
     def resolve_document_language(
         cls,
         document: Document,
     ) -> str | None:
-        """Resolve the parser language from document metadata."""
+        """Resolve a language value from document metadata."""
         if not cls.supports_language:
             return None
 
@@ -52,23 +79,6 @@ class BaseParser(ABC):
                 return value.strip()
 
         return cls.default_language
-
-    @classmethod
-    def validate_config(cls, config: ParsingConfig) -> None:
-        """Validate a configuration against this parser."""
-        if config.parser_name != cls.parser_name:
-            raise ParsingConfigurationError(
-                f"Configuration targets parser {config.parser_name!r}, "
-                f"but this parser is {cls.parser_name!r}."
-            )
-
-        if config.output_format not in cls.supported_output_formats:
-            supported = ", ".join(sorted(cls.supported_output_formats))
-
-            raise ParsingConfigurationError(
-                f"Parser {cls.parser_name!r} does not support output format "
-                f"{config.output_format!r}. Supported formats: {supported}."
-            )
 
     @abstractmethod
     def parse_document(

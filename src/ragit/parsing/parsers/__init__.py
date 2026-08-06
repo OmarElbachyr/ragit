@@ -1,4 +1,4 @@
-"""Concrete parser adapters."""
+"""Built-in parsing adapters."""
 
 from ragit.parsing.parsers.docling import DoclingParser
 from ragit.parsing.parsers.pymupdf4llm import PyMuPDF4LLMParser
