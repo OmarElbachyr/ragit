@@ -1,0 +1,7 @@
+{
+  "options": {
+    "use_ocr": true
+  },
+  "output_format": "markdown",
+  "parser_name": "pymupdf4llm"
+}

@@ -1,0 +1,26 @@
+# Illustrative configuration; not yet executable.
+dataset:
+  path: data/example
+
+parsers:
+  - name: pymupdf
+
+chunkers:
+  - name: page
+  - name: chonkie
+    method: token
+    parameters:
+      chunk_size: 512
+
+retriever:
+  type: dense
+  model: BAAI/bge-m3
+  index:
+    backend: faiss
+    type: flat
+
+evaluation:
+  top_k: 10
+  measures:
+    - nDCG@10
+    - Recall@10

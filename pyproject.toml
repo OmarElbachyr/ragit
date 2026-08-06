@@ -1,0 +1,56 @@
+[project]
+name = "ragit"
+version = "0.1.0.dev0"
+description = "Compare document parsing and chunking configurations with page-level retrieval evaluation."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+
+dependencies = [
+  "chonkie",
+  "faiss-cpu",
+  "ir-measures",
+  "pydantic",
+  "pylate",
+  "pymupdf",
+  "pypdf",
+  "pymupdf4llm",
+  "pyyaml",
+  "pillow",
+  "torch==2.6.0",
+  "torchvision==0.21.0",
+  "transformers>=4.51,<5",
+]
+
+[project.optional-dependencies]
+docling = [
+  "docling",
+  "easyocr",
+]
+
+unstructured = [
+  "unstructured[pdf]",
+]
+
+marker = [
+  "marker-pdf",
+]
+
+docs = [
+  "mkdocs",
+]
+
+dev = [
+  "pytest",
+  "ruff",
+]
+
+all = [
+  "docling",
+  "easyocr",
+  "unstructured[pdf]",
+  "marker-pdf",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ragit"]

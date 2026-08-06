@@ -1,0 +1,68 @@
+flowchart TD
+    A[Representative PDF corpus] --> B[Parser adapters]
+    B --> B1[Docling]
+    B --> B2[Marker]
+    B --> B3[PyMuPDF4LLM]
+    B --> B4[LiteParse]
+    B --> B5[MinerU]
+    B1 --> C[Normalized provenance-preserving document model]
+    B2 --> C
+    B3 --> C
+    B4 --> C
+    B5 --> C
+
+    C --> D[Chunking variants]
+    D --> D1[Fixed-size]
+    D --> D2[Recursive]
+    D --> D3[Section-aware]
+    D --> D4[Page-aware]
+    D --> D5[Table-aware]
+    D --> D6[Context-enriched]
+
+    D1 --> E[Controlled retrieval benchmark]
+    D2 --> E
+    D3 --> E
+    D4 --> E
+    D5 --> E
+    D6 --> E
+
+    E --> F[Metrics]
+    F --> F1[Parsing fidelity]
+    F --> F2[Chunk coverage and fragmentation]
+    F --> F3[Retrieval Recall@k and nDCG]
+    F --> F4[Answer correctness and faithfulness]
+    F --> F5[Citation accuracy]
+    F --> F6[Latency cost and index size]
+
+    E --> G[Visual diagnostics]
+    G --> G1[Parser diff view on original PDF page]
+    G --> G2[Chunk-boundary overlay]
+    G --> G3[Evidence-to-chunk grounding]
+    G --> G4[Failed query inspection]
+
+    F --> H[Failure attribution]
+    G --> H
+    H --> H1[Parsing loss]
+    H --> H2[Reading-order failure]
+    H --> H3[Table corruption]
+    H --> H4[Evidence split across chunks]
+    H --> H5[Retrieval miss]
+    H --> H6[Generation failure after correct retrieval]
+
+    H --> I[Export chosen config and artifacts]
+    I --> I1[YAML config]
+    I --> I2[Parsed JSON]
+    I --> I3[Chunk JSONL or Parquet]
+    I --> I4[Evaluation report]
+
+    classDef input stroke:#6b7280,fill:#f3f4f6
+    classDef process stroke:#6366f1,fill:#eef2ff
+    classDef evaluate stroke:#16a34a,fill:#f0fdf4
+    classDef analysis stroke:#ea580c,fill:#fff7ed
+    classDef output stroke:#0891b2,fill:#ecfeff
+
+    class A input
+    class B,B1,B2,B3,B4,B5,C,D,D1,D2,D3,D4,D5,D6 process
+    class E,F,F1,F2,F3,F4,F5,F6 evaluate
+    class G,G1,G2,G3,G4,H,H1,H2,H3,H4,H5,H6 analysis
+    class I,I1,I2,I3,I4 output

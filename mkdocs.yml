@@ -1,0 +1,9 @@
+site_name: ragit
+site_description: Page-level retrieval evaluation for document preprocessing configurations.
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Dataset format: dataset-format.md
+  - Benchmarking: benchmark.md
+  - Extending ragit: extending-ragit.md
