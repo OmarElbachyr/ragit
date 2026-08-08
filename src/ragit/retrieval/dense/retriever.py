@@ -1,1 +1,0 @@
-"""Dense chunk retrieval orchestration."""

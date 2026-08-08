@@ -1,1 +1,0 @@
-"""Local FAISS index integration."""

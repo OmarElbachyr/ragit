@@ -1,1 +1,0 @@
-"""Local PyLate index integration."""

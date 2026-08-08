@@ -1,1 +1,0 @@
-"""Dense embedding model integration."""
