@@ -6,7 +6,11 @@ from ragit.evaluation.evaluator import (
     evaluate,
     resolve_metrics,
 )
-from ragit.evaluation.models import EvaluationResult, QueryEvaluation
+from ragit.evaluation.models import (
+    EvaluationConfig,
+    EvaluationResult,
+    QueryEvaluation,
+)
 from ragit.evaluation.storage import (
     EvaluationStorageError,
     evaluation_configuration_hash,
@@ -14,6 +18,7 @@ from ragit.evaluation.storage import (
 )
 
 __all__ = [
+    "EvaluationConfig",
     "EvaluationConfigurationError",
     "EvaluationResult",
     "EvaluationStorageError",

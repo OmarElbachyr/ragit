@@ -14,7 +14,7 @@ PDFS_PATH = DATA_PATH / "pdfs"
 
 NUM_QUERIES = 5
 TOP_K = 10
-AGGREGATION = "sum"
+AGGREGATION = "max"
 
 
 collection = initialize_collection(
@@ -117,12 +117,11 @@ indexing_config = IndexingConfig(
     },
 )
 
-print("\nLoading/building late-interaction index...")
+print("\nBuilding late-interaction index...")
 index_result = build_index(
     collection=collection,
     chunking_result=chunking_result,
     config=indexing_config,
-    overwrite=False,
 )
 print(f"Indexed chunks: {len(index_result.chunk_ids)}")
 print(f"Index: {index_result.output_path}")

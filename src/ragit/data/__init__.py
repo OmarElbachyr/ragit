@@ -1,4 +1,4 @@
-"""Collection initialization for ragit."""
+"""Collection initialization for RAGit."""
 
 from ragit.data.collection import initialize_collection
 

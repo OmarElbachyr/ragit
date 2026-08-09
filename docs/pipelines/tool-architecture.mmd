@@ -1,51 +1,32 @@
----
-config:
-  layout: elk
----
 flowchart TD
-    A[Representative enterprise PDF set] --> B[Parser adapters]
-    B --> B1[Docling / Marker / MinerU / Unstructured / PyMuPDF4LLM / custom]
-    B1 --> C[Normalized document graph]
-    C --> C1[Pages]
-    C --> C2[Typed blocks]
-    C --> C3[Coordinates and reading order]
-    C --> C4[Section hierarchy]
-    C --> C5[Parser provenance]
-    C --> D[Chunking variants]
-    D --> D1[Fixed-size]
-    D --> D2[Section-aware]
-    D --> D3[Page-aware]
-    D --> D4[Table-aware]
-    D --> D5[Overlap variants]
-    D --> D6[Similarity or semantic grouping]
-    D --> E[Controlled retrieval and QA evaluation]
-    E --> E1["Recall@k / nDCG / MRR"]
-    E --> E2[Answer correctness]
-    E --> E3[Citation and evidence coverage]
-    E --> E4["Latency / token volume / index size"]
-    E --> F[Failure attribution engine]
-    F --> F1[Reading-order corruption]
-    F --> F2[OCR loss]
-    F --> F3[Table breakage]
-    F --> F4[Evidence split across chunks]
-    F --> F5[Retriever miss despite good chunks]
-    F --> G[Visual diff UI]
-    G --> G1[Overlay blocks on original page]
-    G --> G2[Compare parser outputs]
-    G --> G3[Compare chunk boundaries]
-    G --> G4[Inspect missed evidence]
-    G --> H[Export chosen config and artifacts]
-    
-    classDef input stroke:#6b7280,fill:#f3f4f6
-    classDef process stroke:#6366f1,fill:#eef2ff
-    classDef evaluate stroke:#16a34a,fill:#f0fdf4
-    classDef analysis stroke:#ea580c,fill:#fff7ed
-    classDef output stroke:#0891b2,fill:#ecfeff
-        
-    class A input
-    class B,B1,C process
-    class C1,C2,C3,C4,C5,D,D1,D2,D3,D4,D5,D6 process
-    class E,E1,E2,E3,E4 evaluate
-    class F,F1,F2,F3,F4,F5 analysis
-    class G,G1,G2,G3,G4 analysis
-    class H output
+    A[PDF collection] --> B[Canonical collection]
+    B --> B1[Documents and pages]
+    B --> B2[Queries and page-level qrels]
+    B --> C[Parsing]
+    C --> C1[Docling]
+    C --> C2[PyMuPDF4LLM]
+    C1 --> D[Normalized parsed pages]
+    C2 --> D
+    D --> E[Chunking]
+    E --> E1[Native page chunker]
+    E --> E2[Chonkie strategies]
+    E1 --> F[Chunks with page provenance]
+    E2 --> F
+    F --> G[Indexing]
+    G --> G1[FAISS dense index]
+    G --> G2[PyLate late-interaction index]
+    G1 --> H[Chunk retrieval]
+    G2 --> H
+    H --> I[Page score aggregation]
+    I --> J[Page-level evaluation]
+    J --> J1[Recall / nDCG / Success / RR]
+    J --> K[Experiment result]
+    K --> L[Multi-experiment benchmark]
+    B -.-> M[Content-addressed .ragit artifacts]
+    D -.-> M
+    F -.-> M
+    G -.-> M
+    H -.-> M
+    J -.-> M
+    K -.-> M
+    L -.-> M

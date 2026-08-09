@@ -20,7 +20,7 @@ SCENARIO = 1
 
 def print_collection(collection) -> None:
     print("\nCollection initialized successfully")
-    print(f"Ragit directory: {collection.ragit_path}")
+    print(f"RAGit directory: {collection.ragit_path}")
     print(f"Documents:       {len(collection.documents)}")
     print(f"Pages:           {len(collection.pages)}")
     print(f"Queries:         {len(collection.queries)}")

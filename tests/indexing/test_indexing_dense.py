@@ -229,7 +229,7 @@ def test_dense_config_rejects_unknown_options_before_encoding(tmp_path, collecti
     assert encoder.encode_calls == 0
 
 
-def test_persistence_round_trip_and_complete_cache_reuse(tmp_path, collection, chunks):
+def test_persistence_round_trip_and_rebuild(tmp_path, collection, chunks):
     encoder = FakeDenseEncoder(
         np.array(
             [
@@ -264,21 +264,22 @@ def test_persistence_round_trip_and_complete_cache_reuse(tmp_path, collection, c
     ]
     assert np.allclose(loaded.index.vectors, built.index.vectors)
 
-    # A matching complete artifact is reused without encoding again.
+    # Building again recomputes and replaces the artifact.
     second_encoder = FakeDenseEncoder(
-        np.zeros((2, 2), dtype=np.float32)
+        np.array([[0.0, 2.0], [3.0, 0.0]], dtype=np.float32)
     )
-    reused = build_index(
+    rebuilt = build_index(
         collection=collection,
         chunking_result=_chunking_result(tmp_path, chunks),
         config=config,
         encoder=second_encoder,
     )
-    assert reused.output_path == built.output_path
-    assert second_encoder.encode_calls == 0
+    assert rebuilt.output_path == built.output_path
+    assert second_encoder.encode_calls == 1
+    assert np.allclose(rebuilt.index.vectors, [[0.0, 1.0], [1.0, 0.0]])
 
 
-def test_cache_hash_depends_on_originating_chunking_artifact():
+def test_index_hash_depends_on_originating_chunking_artifact():
     from ragit.indexing.storage import indexing_configuration_hash
 
     config = IndexingConfig(model_name="fake/dense")
@@ -287,6 +288,22 @@ def test_cache_hash_depends_on_originating_chunking_artifact():
     second = indexing_configuration_hash(config, "chunk-hash-b")
 
     assert first != second
+
+
+def test_build_index_does_not_accept_overwrite(tmp_path, collection, chunks):
+    encoder = FakeDenseEncoder(
+        np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    )
+    config = IndexingConfig(model_name="fake/dense")
+
+    with pytest.raises(TypeError, match="overwrite"):
+        build_index(
+            collection=collection,
+            chunking_result=_chunking_result(tmp_path, chunks),
+            config=config,
+            encoder=encoder,
+            overwrite=True,
+        )
 
 
 def test_saved_config_mismatch_is_rejected(tmp_path, collection, chunks):

@@ -14,7 +14,6 @@ from ragit.indexing.storage import (
     PYLATE_INDEX_NAME,
     clear_late_interaction_ready_marker,
     indexing_output_path,
-    late_interaction_artifact_state,
     load_late_interaction_metadata,
     save_late_interaction_index,
 )
@@ -32,10 +31,9 @@ def _build_late_interaction_index_from_result(
     collection: Collection,
     chunking_result: ChunkingResult,
     config: IndexingConfig,
-    overwrite: bool = False,
     encoder: Any | None = None,
 ) -> LateInteractionIndexResult:
-    """Build or reuse a PyLate PLAID index from normalized RAGit chunks."""
+    """Build a PyLate PLAID index from normalized RAGit chunks."""
     if not isinstance(chunking_result, ChunkingResult):
         raise TypeError("chunking_result must be a ChunkingResult instance.")
 
@@ -44,7 +42,6 @@ def _build_late_interaction_index_from_result(
         pdfs_path=collection.pdfs_path,
         config=config,
         chunking_config_hash=chunking_result.config_hash,
-        overwrite=overwrite,
         encoder=encoder,
     )
     return result.model_copy(
@@ -100,7 +97,6 @@ def _build_late_interaction_index(
     pdfs_path: str | Path,
     config: IndexingConfig,
     chunking_config_hash: str,
-    overwrite: bool,
     encoder: Any | None,
 ) -> LateInteractionIndexResult:
     validate_late_interaction_config(config)
@@ -110,33 +106,6 @@ def _build_late_interaction_index(
         config=config,
         chunking_config_hash=chunking_config_hash,
     )
-    state = late_interaction_artifact_state(output_path)
-
-    if state == "complete" and not overwrite:
-        loaded_path, chunk_ids, config_hash = load_late_interaction_metadata(
-            pdfs_path=pdfs_path,
-            config=config,
-            chunking_config_hash=chunking_config_hash,
-        )
-        index = _create_pylate_index(
-            output_path=loaded_path,
-            config=config,
-            override=False,
-        )
-        return LateInteractionIndexResult(
-            index=index,
-            chunk_ids=chunk_ids,
-            config_hash=config_hash,
-            output_path=loaded_path,
-            config=config,
-        )
-
-    if state == "partial" and not overwrite:
-        raise IndexingStorageError(
-            f"Incomplete late-interaction indexing artifact exists at "
-            f"{output_path}. Use overwrite=True to rebuild it."
-        )
-
     normalized_chunks = validate_chunks(chunks)
     if not normalized_chunks:
         raise IndexingConfigurationError(
@@ -179,7 +148,7 @@ def _build_late_interaction_index(
         chunking_config_hash=chunking_config_hash,
         index=index,
         chunk_ids=chunk_ids,
-        replace=overwrite or state != "missing",
+        replace=True,
     )
 
 

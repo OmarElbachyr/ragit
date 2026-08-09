@@ -1,4 +1,4 @@
-"""Validation for canonical ragit collections."""
+"""Validation for canonical RAGit collections."""
 
 from collections import Counter, defaultdict
 from pathlib import Path

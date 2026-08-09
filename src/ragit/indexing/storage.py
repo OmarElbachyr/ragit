@@ -46,7 +46,7 @@ def indexing_configuration_hash(
         )
     except (TypeError, ValueError) as error:
         raise IndexingStorageError(
-            "Indexing configuration must be JSON serializable for caching."
+            "Indexing configuration must be JSON serializable for persistence."
         ) from error
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
@@ -328,7 +328,7 @@ def late_interaction_artifact_state(output_path: Path) -> str:
 
 
 def clear_late_interaction_ready_marker(output_path: Path) -> None:
-    """Prevent a failed overwrite from looking like a complete artifact."""
+    """Prevent a failed rebuild from looking like a complete artifact."""
     ready_path = output_path / LATE_INTERACTION_READY_FILE
     if ready_path.exists():
         ready_path.unlink()

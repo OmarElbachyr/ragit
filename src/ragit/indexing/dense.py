@@ -12,8 +12,6 @@ from ragit.chunking.models import Chunk, ChunkingResult
 from ragit.data.models import Collection
 from ragit.indexing.models import DenseIndexResult, IndexedChunk, IndexingConfig
 from ragit.indexing.storage import (
-    IndexingStorageError,
-    artifact_state,
     indexing_output_path,
     load_dense_index as _load_dense_index,
     save_dense_index,
@@ -31,10 +29,9 @@ def _build_dense_index_from_result(
     collection: Collection,
     chunking_result: ChunkingResult,
     config: IndexingConfig,
-    overwrite: bool = False,
     encoder: Any | None = None,
 ) -> DenseIndexResult:
-    """Build or reuse a dense index from one normalized chunking result.
+    """Build a dense index from one normalized chunking result.
 
     Collection location and chunking provenance are derived from their result
     objects so callers do not need to pass storage paths or configuration
@@ -52,7 +49,6 @@ def _build_dense_index_from_result(
         pdfs_path=collection.pdfs_path,
         config=config,
         chunking_config_hash=chunking_result.config_hash,
-        overwrite=overwrite,
         encoder=encoder,
     )
     return result.model_copy(
@@ -94,7 +90,6 @@ def _build_dense_index(
     pdfs_path: str | Path,
     config: IndexingConfig,
     chunking_config_hash: str,
-    overwrite: bool = False,
     encoder: Any | None = None,
 ) -> DenseIndexResult:
     """Internal dense builder using explicit storage/provenance arguments."""
@@ -105,21 +100,6 @@ def _build_dense_index(
         config=config,
         chunking_config_hash=chunking_config_hash,
     )
-    state = artifact_state(output_path)
-
-    if state == "complete" and not overwrite:
-        return _load_dense_index(
-            pdfs_path=pdfs_path,
-            config=config,
-            chunking_config_hash=chunking_config_hash,
-        )
-
-    if state == "partial" and not overwrite:
-        raise IndexingStorageError(
-            f"Incomplete dense indexing artifact exists at {output_path}. "
-            "Use overwrite=True to rebuild it."
-        )
-
     normalized_chunks = validate_chunks(chunks)
     if not normalized_chunks:
         raise IndexingConfigurationError(
@@ -159,7 +139,7 @@ def _build_dense_index(
         chunking_config_hash=chunking_config_hash,
         index=index,
         chunk_mapping=mapping,
-        replace=overwrite or state != "missing",
+        replace=True,
     )
 
 

@@ -22,16 +22,14 @@ def build_index(
     collection: Collection,
     chunking_result: ChunkingResult,
     config: IndexingConfig,
-    overwrite: bool = False,
     encoder: Any | None = None,
 ) -> IndexResult:
-    """Build or reuse the index selected by ``config.index_type``."""
+    """Build the index selected by ``config.index_type``."""
     if config.index_type == "dense":
         return _build_dense_index_from_result(
             collection=collection,
             chunking_result=chunking_result,
             config=config,
-            overwrite=overwrite,
             encoder=encoder,
         )
 
@@ -40,7 +38,6 @@ def build_index(
             collection=collection,
             chunking_result=chunking_result,
             config=config,
-            overwrite=overwrite,
             encoder=encoder,
         )
 

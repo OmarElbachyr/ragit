@@ -79,7 +79,6 @@ index_result = build_index(
     collection=collection,
     chunking_result=chunking_result,
     config=indexing_config,
-    overwrite=True,
 )
 
 print("\nDense indexing completed")

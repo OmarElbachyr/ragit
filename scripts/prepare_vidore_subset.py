@@ -1,4 +1,4 @@
-"""Prepare a ViDoRe-v3 subset for ragit experiments.
+"""Prepare a ViDoRe-v3 subset for RAGit experiments.
 
 Required packages:
     pip install datasets huggingface_hub pypdf

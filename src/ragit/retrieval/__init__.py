@@ -6,7 +6,12 @@ from ragit.retrieval.dense import (
     RetrievalConfigurationError,
     retrieve,
 )
-from ragit.retrieval.models import RetrievalResult, RetrievedChunk, RetrievedPage
+from ragit.retrieval.models import (
+    RetrievalConfig,
+    RetrievalResult,
+    RetrievedChunk,
+    RetrievedPage,
+)
 from ragit.retrieval.storage import (
     RetrievalStorageError,
     aggregation_identifier,
@@ -17,6 +22,7 @@ from ragit.retrieval.storage import (
 __all__ = [
     "Aggregation",
     "AggregationName",
+    "RetrievalConfig",
     "RetrievalConfigurationError",
     "RetrievalResult",
     "RetrievalStorageError",

@@ -14,7 +14,7 @@ def create_default_metadata(
     pdf_files: list[Path],
     page_counts: dict[str, int],
 ) -> list[Document]:
-    """Create the minimum metadata required by a ragit collection."""
+    """Create the minimum metadata required by a RAGit collection."""
     return [
         Document(
             file_name=pdf_path.name,

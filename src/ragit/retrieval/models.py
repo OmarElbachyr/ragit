@@ -1,8 +1,25 @@
 """Normalized models for RAGit retrieval."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, StrictInt, field_validator, model_validator
+
+
+class RetrievalConfig(BaseModel):
+    """Configuration for page-level retrieval in an experiment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    top_k: StrictInt = 100
+    aggregation: Literal["max", "sum", "mean"] = "max"
+
+    @field_validator("top_k")
+    @classmethod
+    def validate_config_top_k(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("top_k must be greater than zero.")
+        return value
 
 
 class RetrievedChunk(BaseModel):
@@ -83,7 +100,7 @@ class RetrievedPage(BaseModel):
 
 
 class RetrievalResult(BaseModel):
-    """One persisted page-level dense retrieval run."""
+    """One persisted page-level retrieval run."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

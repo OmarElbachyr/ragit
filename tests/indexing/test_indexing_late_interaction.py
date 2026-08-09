@@ -116,6 +116,47 @@ def test_late_interaction_index_encodes_multivectors_and_preserves_chunk_ids(
     assert (result.output_path / "index.ready").exists()
 
 
+def test_late_interaction_build_recomputes_existing_index(
+    tmp_path,
+    monkeypatch,
+):
+    import ragit.indexing.late_interaction as module
+
+    created = []
+
+    def fake_create(**kwargs):
+        created.append(kwargs)
+        return FakePLAID()
+
+    monkeypatch.setattr(module, "_create_pylate_index", fake_create)
+
+    config = IndexingConfig(
+        index_type="late_interaction",
+        model_name="fake/colbert",
+    )
+    collection = SimpleNamespace(pdfs_path=tmp_path)
+    first_encoder = FakeColBERT()
+    second_encoder = FakeColBERT()
+
+    first = build_index(
+        collection=collection,
+        chunking_result=_chunking_result(tmp_path),
+        config=config,
+        encoder=first_encoder,
+    )
+    second = build_index(
+        collection=collection,
+        chunking_result=_chunking_result(tmp_path),
+        config=config,
+        encoder=second_encoder,
+    )
+
+    assert first.output_path == second.output_path
+    assert len(first_encoder.calls) == 1
+    assert len(second_encoder.calls) == 1
+    assert created[-1]["override"] is True
+
+
 def test_dense_encoder_is_rejected_for_late_interaction(tmp_path):
     config = IndexingConfig(
         index_type="late_interaction",

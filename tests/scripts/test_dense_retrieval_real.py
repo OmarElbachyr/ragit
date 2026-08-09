@@ -106,12 +106,11 @@ indexing_config = IndexingConfig(
     },
 )
 
-print("\nLoading/building dense index...")
+print("\nBuilding dense index...")
 index_result = build_index(
     collection=collection,
     chunking_result=chunking_result,
     config=indexing_config,
-    overwrite=False,
 )
 
 print(f"FAISS vectors: {index_result.index.ntotal}")

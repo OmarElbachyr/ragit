@@ -2,7 +2,18 @@
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
+
+
+class EvaluationConfig(BaseModel):
+    """Configuration for page-level evaluation in an experiment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    metrics: list[str] = Field(
+        default_factory=lambda: ["nDCG", "Recall", "Success", "RR"]
+    )
+    k: list[StrictInt] = Field(default_factory=lambda: [1, 5, 10])
 
 
 class QueryEvaluation(BaseModel):
