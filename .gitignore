@@ -11,3 +11,5 @@ build/
 site/
 
 **/.ragit/
+
+data.backup
