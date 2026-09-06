@@ -38,7 +38,7 @@ config = ExperimentConfig(
     ),
     indexing=IndexingConfig(
         index_type="dense",
-        model_name="BAAI/bge-m3",
+        model_name="lightonai/mDenseOn",
         options={
             "batch_size": 16,
             "show_progress_bar": True,

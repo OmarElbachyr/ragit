@@ -1,4 +1,4 @@
-"""Run the full late-interaction page-retrieval + evaluation pipeline on one PDF."""
+"""Run the Sentence Transformers + FastPlaid evaluation pipeline on one PDF."""
 
 from pathlib import Path
 
@@ -87,13 +87,12 @@ index_result = build_index(
     chunking_result=chunking_result,
     config=IndexingConfig(
         index_type="late_interaction",
-        model_name="lightonai/GTE-ModernColBERT-v1",
+        model_name="lightonai/mLateOn",
         options={
             "batch_size": 16,
             "show_progress_bar": True,
         },
     ),
-    overwrite=False,
 )
 
 subset = collection.model_copy(

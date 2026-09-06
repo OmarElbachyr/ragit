@@ -1,4 +1,4 @@
-"""Run late-interaction indexing and page-level retrieval on one real PDF."""
+"""Run Sentence Transformers + FastPlaid retrieval on one real PDF."""
 
 from pathlib import Path
 
@@ -105,19 +105,19 @@ print(f"Chunks: {len(chunking_result.chunks)}")
 
 
 # ---------------------------------------------------------------------
-# Late-interaction indexing
+# Sentence Transformers multi-vector + FastPlaid indexing
 # ---------------------------------------------------------------------
 
 indexing_config = IndexingConfig(
     index_type="late_interaction",
-    model_name="lightonai/GTE-ModernColBERT-v1",
+    model_name="lightonai/mLateOn",
     options={
         "batch_size": 16,
         "show_progress_bar": True,
     },
 )
 
-print("\nBuilding late-interaction index...")
+print("\nBuilding FastPlaid late-interaction index...")
 index_result = build_index(
     collection=collection,
     chunking_result=chunking_result,

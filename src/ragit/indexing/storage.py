@@ -22,7 +22,7 @@ CONFIG_FILE = "config.json"
 DENSE_INDEX_FILE = "index.faiss"
 CHUNKS_FILE = "chunks.jsonl"
 LATE_INTERACTION_READY_FILE = "index.ready"
-PYLATE_INDEX_NAME = "index"
+LATE_INTERACTION_BACKEND = "fast-plaid-v1"
 
 
 class IndexingStorageError(ValueError):
@@ -220,7 +220,7 @@ def save_late_interaction_index(
     chunk_ids: Iterable[str],
     replace: bool = False,
 ) -> LateInteractionIndexResult:
-    """Persist RAGit metadata after PyLate has persisted its own index."""
+    """Persist RAGit metadata after FastPlaid has persisted its own index."""
     output_path = indexing_output_path(
         pdfs_path=pdfs_path,
         config=config,
@@ -271,7 +271,7 @@ def load_late_interaction_metadata(
     config: IndexingConfig,
     chunking_config_hash: str,
 ) -> tuple[Path, list[str], str]:
-    """Validate/load RAGit metadata for a PyLate index."""
+    """Validate/load RAGit metadata for a FastPlaid index."""
     output_path = indexing_output_path(
         pdfs_path=pdfs_path,
         config=config,
@@ -348,10 +348,16 @@ def _configuration_payload(
         raise IndexingStorageError(
             "chunking_config_hash must be a non-empty string."
         )
-    return {
+    payload = {
         "indexing_config": config.model_dump(mode="json"),
         "chunking_config_hash": chunking_config_hash,
     }
+    if config.index_type == "late_interaction":
+        # PyLate and FastPlaid use incompatible on-disk layouts. Keep new
+        # FastPlaid artifacts separate from legacy PyLate artifacts even when
+        # the public indexing configuration is otherwise identical.
+        payload["late_interaction_backend"] = LATE_INTERACTION_BACKEND
+    return payload
 
 
 def _validate_saved_config(

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import pickle
+import sys
+from types import ModuleType
 from types import SimpleNamespace
 
 import numpy as np
@@ -227,6 +229,36 @@ def test_dense_config_rejects_unknown_options_before_encoding(tmp_path, collecti
         )
 
     assert encoder.encode_calls == 0
+
+
+def test_dense_loader_supports_sentence_transformers_remote_code(
+    monkeypatch,
+):
+    import ragit.indexing.dense as module
+
+    captured = {}
+
+    class SentenceTransformer:
+        def __init__(self, model_name, **kwargs):
+            captured["model_name"] = model_name
+            captured["kwargs"] = kwargs
+
+    sentence_transformers = ModuleType("sentence_transformers")
+    sentence_transformers.SentenceTransformer = SentenceTransformer
+    monkeypatch.setitem(sys.modules, "sentence_transformers", sentence_transformers)
+
+    encoder = module._load_encoder(
+        IndexingConfig(
+            model_name="perplexity-ai/pplx-embed-v1-0.6b",
+            options={"device": "cuda", "trust_remote_code": True},
+        )
+    )
+
+    assert isinstance(encoder, SentenceTransformer)
+    assert captured == {
+        "model_name": "perplexity-ai/pplx-embed-v1-0.6b",
+        "kwargs": {"device": "cuda", "trust_remote_code": True},
+    }
 
 
 def test_persistence_round_trip_and_rebuild(tmp_path, collection, chunks):

@@ -9,14 +9,15 @@ from ragit.chunking.models import Chunk
 from ragit.indexing.models import IndexingConfig
 
 
-_DENSE_OPTIONS = frozenset({"batch_size", "device", "show_progress_bar"})
+_DENSE_OPTIONS = frozenset(
+    {"batch_size", "device", "show_progress_bar", "trust_remote_code"}
+)
 _LATE_INTERACTION_OPTIONS = frozenset(
     {
         "batch_size",
         "device",
         "show_progress_bar",
         "trust_remote_code",
-        "pool_factor",
     }
 )
 _MULTI_VECTOR_CLASS_MARKERS = ("multivector", "lateinteraction", "colbert")
@@ -35,10 +36,11 @@ def validate_dense_config(config: IndexingConfig) -> None:
             f"{config.index_type!r}."
         )
     _validate_common_options(config, _DENSE_OPTIONS, "dense")
+    _validate_trust_remote_code(config)
 
 
 def validate_late_interaction_config(config: IndexingConfig) -> None:
-    """Validate PyLate late-interaction indexing options."""
+    """Validate FastPlaid late-interaction indexing options."""
     _validate_config_instance(config)
     if config.index_type != "late_interaction":
         raise IndexingConfigurationError(
@@ -51,22 +53,7 @@ def validate_late_interaction_config(config: IndexingConfig) -> None:
         "late-interaction",
     )
 
-    trust_remote_code = config.options.get("trust_remote_code", False)
-    if not isinstance(trust_remote_code, bool):
-        raise IndexingConfigurationError(
-            "The 'trust_remote_code' option must be a boolean."
-        )
-
-    pool_factor = config.options.get("pool_factor")
-    if pool_factor is not None:
-        if isinstance(pool_factor, bool) or not isinstance(pool_factor, int):
-            raise IndexingConfigurationError(
-                "The 'pool_factor' option must be an integer."
-            )
-        if pool_factor <= 0:
-            raise IndexingConfigurationError(
-                "The 'pool_factor' option must be greater than zero."
-            )
+    _validate_trust_remote_code(config)
 
 
 def validate_dense_encoder(encoder: Any, model_name: str) -> int:
@@ -103,16 +90,16 @@ def validate_dense_encoder(encoder: Any, model_name: str) -> int:
 
 
 def validate_late_interaction_encoder(encoder: Any, model_name: str) -> None:
-    """Validate a ColBERT-style multi-vector encoder before corpus encoding."""
-    if not callable(getattr(encoder, "encode", None)):
-        raise IndexingConfigurationError(
-            f"Model {model_name!r} does not provide an encode() method."
-        )
+    """Validate a Sentence Transformers multi-vector encoder."""
     if not _has_multi_vector_signal(encoder, include_self=True):
         raise IndexingConfigurationError(
             f"Model {model_name!r} does not expose a ColBERT/late-interaction "
             "multi-vector capability and is not compatible with "
             "index_type='late_interaction'."
+        )
+    if not callable(getattr(encoder, "encode_document", None)):
+        raise IndexingConfigurationError(
+            f"Model {model_name!r} does not provide an encode_document() method."
         )
 
 
@@ -224,6 +211,14 @@ def _validate_common_options(
     if not isinstance(show_progress, bool):
         raise IndexingConfigurationError(
             "The 'show_progress_bar' option must be a boolean."
+        )
+
+
+def _validate_trust_remote_code(config: IndexingConfig) -> None:
+    trust_remote_code = config.options.get("trust_remote_code", False)
+    if not isinstance(trust_remote_code, bool):
+        raise IndexingConfigurationError(
+            "The 'trust_remote_code' option must be a boolean."
         )
 
 

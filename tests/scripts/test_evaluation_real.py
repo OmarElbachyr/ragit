@@ -90,7 +90,7 @@ index_result = build_index(
     chunking_result=chunking_result,
     config=IndexingConfig(
         index_type="dense",
-        model_name="BAAI/bge-m3",
+        model_name="lightonai/mDenseOn",
         options={
             "batch_size": 16,
             "show_progress_bar": True,

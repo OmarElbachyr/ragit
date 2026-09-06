@@ -1,6 +1,8 @@
 """Focused tests for late-interaction page-level retrieval."""
 
+import sys
 from pathlib import Path
+from types import ModuleType
 from types import SimpleNamespace
 
 import numpy as np
@@ -11,11 +13,11 @@ from ragit.indexing import IndexingConfig, LateInteractionIndexResult
 from ragit.retrieval import retrieve
 
 
-class FakeColBERT:
+class FakeMultiVectorEncoder:
     def __init__(self):
         self.calls = []
 
-    def encode(self, texts, **kwargs):
+    def encode_query(self, texts, **kwargs):
         self.calls.append((list(texts), dict(kwargs)))
         return [
             np.ones((2, 4), dtype=np.float32)
@@ -23,12 +25,12 @@ class FakeColBERT:
         ]
 
 
-class FakeRetriever:
+class FakeFastPlaid:
     def __init__(self, rows):
         self.rows = rows
         self.calls = []
 
-    def retrieve(self, **kwargs):
+    def search(self, **kwargs):
         self.calls.append(kwargs)
         return self.rows
 
@@ -56,10 +58,10 @@ def _chunks():
     ]
 
 
-def _index_result(tmp_path: Path) -> LateInteractionIndexResult:
+def _index_result(tmp_path: Path, index=None) -> LateInteractionIndexResult:
     chunks = _chunks()
     return LateInteractionIndexResult(
-        index=object(),
+        index=object() if index is None else index,
         chunk_ids=[chunk.chunk_id for chunk in chunks],
         config_hash="li-index-hash",
         output_path=tmp_path / ".ragit" / "indexing" / "late_interaction" / "x",
@@ -76,12 +78,12 @@ def test_late_interaction_retrieval_uses_query_encoding_and_page_aggregation(
     tmp_path,
     monkeypatch,
 ):
-    encoder = FakeColBERT()
-    retriever = FakeRetriever(
+    encoder = FakeMultiVectorEncoder()
+    fast_plaid = FakeFastPlaid(
         [[
-            {"id": "doc:00000001", "score": 0.9},
-            {"id": "doc:00000000", "score": 0.8},
-            {"id": "doc:00000002", "score": 0.2},
+            (1, 0.9),
+            (0, 0.8),
+            (2, 0.2),
         ]]
     )
 
@@ -92,11 +94,6 @@ def test_late_interaction_retrieval_uses_query_encoding_and_page_aggregation(
         "_load_late_interaction_encoder",
         lambda result: encoder,
     )
-    monkeypatch.setattr(
-        module,
-        "_load_late_interaction_retriever",
-        lambda result: retriever,
-    )
 
     collection = SimpleNamespace(
         pdfs_path=tmp_path,
@@ -105,19 +102,18 @@ def test_late_interaction_retrieval_uses_query_encoding_and_page_aggregation(
 
     result = retrieve(
         collection=collection,
-        index_result=_index_result(tmp_path),
+        index_result=_index_result(tmp_path, index=fast_plaid),
         top_k=2,
         aggregation="max",
     )
 
     texts, kwargs = encoder.calls[0]
     assert texts == ["question"]
-    assert kwargs["is_query"] is True
     assert kwargs["batch_size"] == 8
 
-    call = retriever.calls[0]
-    assert call["k"] == 3
-    assert "n_full_scores" not in call
+    call = fast_plaid.calls[0]
+    assert call["top_k"] == 3
+    assert call["show_progress"] is False
 
     assert [(page.page_id, page.rank) for page in result.results] == [
         (10, 1),
@@ -138,12 +134,12 @@ def test_late_interaction_sum_uses_all_contributing_chunks(
     tmp_path,
     monkeypatch,
 ):
-    encoder = FakeColBERT()
-    retriever = FakeRetriever(
+    encoder = FakeMultiVectorEncoder()
+    fast_plaid = FakeFastPlaid(
         [[
-            {"id": "doc:00000000", "score": 0.8},
-            {"id": "doc:00000001", "score": 0.7},
-            {"id": "doc:00000002", "score": 0.1},
+            (0, 0.8),
+            (1, 0.7),
+            (2, 0.1),
         ]]
     )
 
@@ -154,18 +150,13 @@ def test_late_interaction_sum_uses_all_contributing_chunks(
         "_load_late_interaction_encoder",
         lambda result: encoder,
     )
-    monkeypatch.setattr(
-        module,
-        "_load_late_interaction_retriever",
-        lambda result: retriever,
-    )
 
     result = retrieve(
         collection=SimpleNamespace(
             pdfs_path=tmp_path,
             queries=[Query(query_id=1, text="q")],
         ),
-        index_result=_index_result(tmp_path),
+        index_result=_index_result(tmp_path, index=fast_plaid),
         top_k=10,
         aggregation="sum",
     )
@@ -180,12 +171,12 @@ def test_late_interaction_persists_same_page_level_schema(
     tmp_path,
     monkeypatch,
 ):
-    encoder = FakeColBERT()
-    retriever = FakeRetriever(
+    encoder = FakeMultiVectorEncoder()
+    fast_plaid = FakeFastPlaid(
         [[
-            {"id": "doc:00000000", "score": 0.8},
-            {"id": "doc:00000001", "score": 0.7},
-            {"id": "doc:00000002", "score": 0.1},
+            (0, 0.8),
+            (1, 0.7),
+            (2, 0.1),
         ]]
     )
 
@@ -197,18 +188,13 @@ def test_late_interaction_persists_same_page_level_schema(
         "_load_late_interaction_encoder",
         lambda result: encoder,
     )
-    monkeypatch.setattr(
-        module,
-        "_load_late_interaction_retriever",
-        lambda result: retriever,
-    )
 
     result = retrieve(
         collection=SimpleNamespace(
             pdfs_path=tmp_path,
             queries=[Query(query_id=1, text="q")],
         ),
-        index_result=_index_result(tmp_path),
+        index_result=_index_result(tmp_path, index=fast_plaid),
         top_k=2,
     )
 
@@ -249,11 +235,11 @@ def test_late_interaction_uses_internal_candidate_depth_and_accepts_partial_rank
         chunks=chunks,
     )
 
-    encoder = FakeColBERT()
-    retriever = FakeRetriever(
+    encoder = FakeMultiVectorEncoder()
+    fast_plaid = FakeFastPlaid(
         [[
-            {"id": "doc:00000005", "score": 0.9},
-            {"id": "doc:00000012", "score": 0.8},
+            (5, 0.9),
+            (12, 0.8),
         ]]
     )
 
@@ -264,11 +250,7 @@ def test_late_interaction_uses_internal_candidate_depth_and_accepts_partial_rank
         "_load_late_interaction_encoder",
         lambda result: encoder,
     )
-    monkeypatch.setattr(
-        module,
-        "_load_late_interaction_retriever",
-        lambda result: retriever,
-    )
+    index_result.index = fast_plaid
 
     result = retrieve(
         collection=SimpleNamespace(
@@ -280,12 +262,38 @@ def test_late_interaction_uses_internal_candidate_depth_and_accepts_partial_rank
         aggregation="max",
     )
 
-    call = retriever.calls[0]
-    assert call["k"] == 100
-    assert "n_full_scores" not in call
+    call = fast_plaid.calls[0]
+    assert call["top_k"] == 150
+    assert call["show_progress"] is False
 
     assert [(page.page_id, page.rank) for page in result.results] == [
         (5, 1),
         (12, 2),
     ]
     assert [page.chunks[0].rank for page in result.results] == [1, 2]
+
+
+def test_late_interaction_retrieval_loads_sentence_transformers_encoder(
+    tmp_path,
+    monkeypatch,
+):
+    import ragit.retrieval.dense as module
+
+    captured = {}
+
+    class MultiVectorEncoder:
+        def __init__(self, model_name, **kwargs):
+            captured["model_name"] = model_name
+            captured["kwargs"] = kwargs
+
+    sentence_transformers = ModuleType("sentence_transformers")
+    sentence_transformers.MultiVectorEncoder = MultiVectorEncoder
+    monkeypatch.setitem(sys.modules, "sentence_transformers", sentence_transformers)
+
+    encoder = module._load_late_interaction_encoder(_index_result(tmp_path))
+
+    assert isinstance(encoder, MultiVectorEncoder)
+    assert captured == {
+        "model_name": "fake/colbert",
+        "kwargs": {},
+    }

@@ -1,4 +1,4 @@
-"""PyLate ColBERT-style multi-vector indexing for RAGit."""
+"""Sentence Transformers multi-vector encoding with FastPlaid indexing."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from ragit.data.models import Collection
 from ragit.indexing.models import IndexingConfig, LateInteractionIndexResult
 from ragit.indexing.storage import (
     IndexingStorageError,
-    PYLATE_INDEX_NAME,
     clear_late_interaction_ready_marker,
     indexing_output_path,
     load_late_interaction_metadata,
@@ -33,7 +32,7 @@ def _build_late_interaction_index_from_result(
     config: IndexingConfig,
     encoder: Any | None = None,
 ) -> LateInteractionIndexResult:
-    """Build a PyLate PLAID index from normalized RAGit chunks."""
+    """Build a FastPlaid index from normalized RAGit chunks."""
     if not isinstance(chunking_result, ChunkingResult):
         raise TypeError("chunking_result must be a ChunkingResult instance.")
 
@@ -58,7 +57,7 @@ def _load_late_interaction_index_from_result(
     chunking_result: ChunkingResult,
     config: IndexingConfig,
 ) -> LateInteractionIndexResult:
-    """Load a persisted PyLate index and attach originating chunks."""
+    """Load a persisted FastPlaid index and attach originating chunks."""
     if not isinstance(chunking_result, ChunkingResult):
         raise TypeError("chunking_result must be a ChunkingResult instance.")
 
@@ -76,10 +75,9 @@ def _load_late_interaction_index_from_result(
             "chunking result."
         )
 
-    index = _create_pylate_index(
+    index = _create_fast_plaid_index(
         output_path=output_path,
         config=config,
-        override=False,
     )
     return LateInteractionIndexResult(
         index=index,
@@ -124,22 +122,17 @@ def _build_late_interaction_index(
 
     output_path.mkdir(parents=True, exist_ok=True)
     clear_late_interaction_ready_marker(output_path)
-    index = _create_pylate_index(
+    index = _create_fast_plaid_index(
         output_path=output_path,
         config=config,
-        override=True,
     )
 
     chunk_ids = [chunk.chunk_id for chunk in normalized_chunks]
     try:
-        index.add_documents(
-            documents_ids=chunk_ids,
-            documents_embeddings=document_embeddings,
-        )
+        index.create(documents_embeddings=document_embeddings)
     except (TypeError, ValueError, RuntimeError) as error:
         raise IndexingConfigurationError(
-            "PyLate failed while adding chunk multi-vector representations "
-            "to the PLAID index."
+            "FastPlaid failed while creating the late-interaction index."
         ) from error
 
     return save_late_interaction_index(
@@ -158,26 +151,22 @@ def _encode_chunks(
     chunks: list[Chunk],
     config: IndexingConfig,
 ) -> list[Any]:
-    """Encode one variable-length token matrix per chunk with PyLate."""
+    """Encode one variable-length token matrix per chunk for PLAID."""
     options = config.options
     encode_kwargs: dict[str, Any] = {
         "batch_size": options.get("batch_size", 32),
-        "is_query": False,
         "show_progress_bar": options.get("show_progress_bar", False),
     }
-    pool_factor = options.get("pool_factor")
-    if pool_factor is not None:
-        encode_kwargs["pool_factor"] = pool_factor
 
     try:
-        embeddings = encoder.encode(
+        embeddings = encoder.encode_document(
             [chunk.content for chunk in chunks],
             **encode_kwargs,
         )
     except TypeError as error:
         raise IndexingConfigurationError(
             f"Model {config.model_name!r} does not provide a compatible "
-            "PyLate ColBERT encode() interface."
+            "Sentence Transformers MultiVectorEncoder document interface."
         ) from error
 
     return validate_multi_vector_embeddings(
@@ -189,44 +178,41 @@ def _encode_chunks(
 
 def _load_encoder(config: IndexingConfig) -> Any:
     try:
-        from pylate import models
+        from sentence_transformers import MultiVectorEncoder
     except ImportError as error:
         raise ImportError(
-            "pylate is required for late-interaction RAGit indexing."
+            "sentence-transformers>=6 is required to load late-interaction "
+            "models by name. Install it or pass an already loaded compatible "
+            "encoder to build_index()."
         ) from error
 
-    kwargs: dict[str, Any] = {
-        "model_name_or_path": config.model_name,
-    }
+    kwargs: dict[str, Any] = {}
     device = config.options.get("device")
     if device is not None:
         kwargs["device"] = device
     if config.options.get("trust_remote_code", False):
         kwargs["trust_remote_code"] = True
 
-    return models.ColBERT(**kwargs)
+    return MultiVectorEncoder(config.model_name, **kwargs)
 
 
-def _create_pylate_index(
+def _create_fast_plaid_index(
     *,
     output_path: Path,
     config: IndexingConfig,
-    override: bool,
 ) -> Any:
     try:
-        from pylate import indexes
+        from fast_plaid import search
     except ImportError as error:
         raise ImportError(
-            "pylate is required for late-interaction RAGit indexing."
+            "fast-plaid is required for late-interaction RAGit indexing."
         ) from error
 
     kwargs: dict[str, Any] = {
-        "index_folder": str(output_path),
-        "index_name": PYLATE_INDEX_NAME,
-        "override": override,
+        "index": str(output_path),
     }
     device = config.options.get("device")
     if device is not None:
         kwargs["device"] = device
 
-    return indexes.PLAID(**kwargs)
+    return search.FastPlaid(**kwargs)

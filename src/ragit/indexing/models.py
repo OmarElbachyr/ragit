@@ -63,7 +63,7 @@ class DenseIndexResult(BaseModel):
 
 
 class LateInteractionIndexResult(BaseModel):
-    """Loaded or newly built PyLate index and its source provenance."""
+    """Loaded or newly built FastPlaid index and its source provenance."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

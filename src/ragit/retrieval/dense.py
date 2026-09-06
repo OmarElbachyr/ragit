@@ -206,75 +206,71 @@ def _retrieve_late_interaction_chunks(
         queries=queries,
         index_result=index_result,
     )
-    retriever = _load_late_interaction_retriever(index_result)
-
     candidate_k = min(_LATE_INTERACTION_CANDIDATE_K, num_chunks)
-
     try:
-        raw_results = retriever.retrieve(
+        raw_results = index_result.index.search(
             queries_embeddings=query_embeddings,
-            k=candidate_k,
+            top_k=candidate_k,
+            show_progress=False,
         )
     except (TypeError, ValueError, RuntimeError) as error:
         raise RetrievalConfigurationError(
-            "PyLate search failed for the late-interaction query embeddings."
+            "FastPlaid search failed for the late-interaction query embeddings."
         ) from error
 
     try:
         result_rows = list(raw_results)
     except TypeError as error:
         raise RetrievalConfigurationError(
-            "PyLate returned an invalid retrieval result."
+            "FastPlaid returned an invalid retrieval result."
         ) from error
 
     if len(result_rows) != len(queries):
         raise RetrievalConfigurationError(
-            "PyLate returned an unexpected number of query result lists."
+            "FastPlaid returned an unexpected number of query result lists."
         )
 
     chunks_by_id = _late_interaction_chunk_lookup(index_result)
     normalized: dict[int, list[RetrievedChunk]] = {}
     for query, row in zip(queries, result_rows, strict=True):
         row = list(row)
-        normalized[query.query_id] = _normalize_late_interaction_query_results(
+        normalized[query.query_id] = _normalize_fast_plaid_query_results(
             query=query,
             row=row,
             chunks_by_id=chunks_by_id,
-            expected_chunk_ids=set(index_result.chunk_ids),
+            chunk_ids=index_result.chunk_ids,
         )
     return normalized
 
 
-def _normalize_late_interaction_query_results(
+def _normalize_fast_plaid_query_results(
     *,
     query: Query,
     row: list[Any],
     chunks_by_id: dict[str, Any],
-    expected_chunk_ids: set[str],
+    chunk_ids: list[str],
 ) -> list[RetrievedChunk]:
     results: list[RetrievedChunk] = []
     seen_ids: set[str] = set()
 
     for rank_offset, item in enumerate(row):
         try:
-            chunk_id = str(item["id"])
-            score = float(item["score"])
-        except (KeyError, TypeError, ValueError) as error:
+            index_position, raw_score = item
+            chunk_id = chunk_ids[int(index_position)]
+            score = float(raw_score)
+        except (IndexError, TypeError, ValueError) as error:
             raise RetrievalConfigurationError(
-                "PyLate result items must contain 'id' and numeric 'score'."
+                "FastPlaid result items must contain a valid index position "
+                "and numeric score."
             ) from error
 
-        if chunk_id not in expected_chunk_ids:
-            raise RetrievalConfigurationError(
-                f"PyLate returned unknown chunk_id={chunk_id!r}."
-            )
         if chunk_id in seen_ids:
             raise RetrievalConfigurationError(
-                f"PyLate returned duplicate chunk_id={chunk_id!r}."
+                f"FastPlaid returned duplicate chunk_id={chunk_id!r}."
             )
         if not np.isfinite(score):
             raise RetrievalConfigurationError(
-                "PyLate returned a non-finite chunk score for "
+                "FastPlaid returned a non-finite chunk score for "
                 f"query_id={query.query_id}, chunk_id={chunk_id!r}."
             )
 
@@ -305,16 +301,16 @@ def _encode_late_interaction_queries(
         )
     options = index_result.config.options
     try:
-        return encoder.encode(
+        return encoder.encode_query(
             [query.text for query in queries],
             batch_size=options.get("batch_size", 32),
-            is_query=True,
             show_progress_bar=options.get("show_progress_bar", False),
         )
     except TypeError as error:
         raise RetrievalConfigurationError(
             f"Model {index_result.config.model_name!r} does not provide a "
-            "compatible PyLate query encoding interface."
+            "compatible Sentence Transformers MultiVectorEncoder query "
+            "interface."
         ) from error
 
 
@@ -326,33 +322,20 @@ def _load_late_interaction_encoder(
             "Late-interaction index result is missing its configuration."
         )
     try:
-        from pylate import models
+        from sentence_transformers import MultiVectorEncoder
     except ImportError as error:
         raise ImportError(
-            "pylate is required for late-interaction RAGit retrieval."
+            "sentence-transformers>=6 is required for late-interaction "
+            "RAGit retrieval."
         ) from error
 
-    kwargs: dict[str, Any] = {
-        "model_name_or_path": index_result.config.model_name,
-    }
+    kwargs: dict[str, Any] = {}
     device = index_result.config.options.get("device")
     if device is not None:
         kwargs["device"] = device
     if index_result.config.options.get("trust_remote_code", False):
         kwargs["trust_remote_code"] = True
-    return models.ColBERT(**kwargs)
-
-
-def _load_late_interaction_retriever(
-    index_result: LateInteractionIndexResult,
-) -> Any:
-    try:
-        from pylate import retrieve as pylate_retrieve
-    except ImportError as error:
-        raise ImportError(
-            "pylate is required for late-interaction RAGit retrieval."
-        ) from error
-    return pylate_retrieve.ColBERT(index=index_result.index)
+    return MultiVectorEncoder(index_result.config.model_name, **kwargs)
 
 
 # ---------------------------------------------------------------------------

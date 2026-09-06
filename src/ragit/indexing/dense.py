@@ -259,6 +259,8 @@ def _load_encoder(config: IndexingConfig) -> Any:
     device = config.options.get("device")
     if device is not None:
         kwargs["device"] = device
+    if config.options.get("trust_remote_code", False):
+        kwargs["trust_remote_code"] = True
 
     return SentenceTransformer(config.model_name, **kwargs)
 
