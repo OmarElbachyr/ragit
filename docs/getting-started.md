@@ -69,7 +69,7 @@ config = ExperimentConfig(
     ),
     indexing=IndexingConfig(
         index_type="dense",
-        model_name="BAAI/bge-m3",
+        model_name="lightonai/mDenseOn",
     ),
     retrieval=RetrievalConfig(
         top_k=10,
@@ -87,3 +87,8 @@ print(result.metrics)
 
 An experiment requires queries and page-level qrels in the initialized
 collection. Results and reusable stage artifacts are written beneath `.ragit/`.
+
+## Indexing
+
+See [Indexing](indexing.md) for dense FAISS and late-interaction FastPlaid
+configuration.

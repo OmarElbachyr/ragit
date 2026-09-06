@@ -23,7 +23,8 @@ Current capabilities include:
   picture descriptions;
 - native page chunking plus Chonkie token, sentence, recursive, fast,
   semantic, late, and neural strategies;
-- FAISS dense indexes and PyLate late-interaction indexes;
+- Sentence Transformers dense and multi-vector encoders, with FAISS dense
+  indexes and FastPlaid late-interaction indexes;
 - chunk-to-page score aggregation and evaluation with `ir-measures`;
 - persisted, content-addressed artifacts under each collection's `.ragit/`
   directory; and

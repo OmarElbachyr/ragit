@@ -9,7 +9,8 @@ experiments, and benchmarks. Stage artifacts are stored under the collection's
 `.ragit/` directory and reused when their configuration hashes match.
 
 Start with [Getting started](getting-started.md), review [Parsing](parsing.md)
-or [Chunking](chunking.md) to configure preprocessing, or see the
+or [Chunking](chunking.md) to configure preprocessing, see [Indexing](indexing.md)
+to configure retrieval, or see the
 [dataset format](dataset-format.md) before importing an existing benchmark.
 
 The API is under active development and is not yet stable.

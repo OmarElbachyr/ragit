@@ -4,6 +4,7 @@ site_description: Page-level retrieval evaluation for document preprocessing con
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Indexing: indexing.md
   - Parsing: parsing.md
   - Marker: marker.md
   - Chunking: chunking.md

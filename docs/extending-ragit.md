@@ -1,8 +1,7 @@
 # Extending RAGit
 
-RAGit offers three levels for custom chunking. Start with the smallest
-interface that provides the control your strategy needs. In every case, the
-custom implementation must be imported before its name is used in a
+RAGit offers three interfaces for custom chunking. In every case, the custom
+implementation must be imported before its name is used in a
 `ChunkingConfig`; registration is local to the running Python process.
 
 ## 1. Return strings for the common case

@@ -145,9 +145,6 @@ ChunkingConfig(
 )
 ```
 
-For GPU execution, change `device_map` to `cuda` or `cuda:0` as supported by
-the installed Chonkie version.
-
 ## Configuration errors
 
 If Chonkie rejects an option, RAGit reports the selected strategy, preserves
