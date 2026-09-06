@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ragit.chunking.storage import chunking_config_payload
 from ragit.experiment.models import ExperimentConfig, ExperimentResult
 
 
@@ -19,7 +20,7 @@ def experiment_configuration_hash(config: ExperimentConfig) -> str:
     if not isinstance(config, ExperimentConfig):
         raise TypeError("config must be an ExperimentConfig instance.")
 
-    payload = config.model_dump(mode="json")
+    payload = experiment_config_payload(config)
     serialized = json.dumps(
         payload,
         ensure_ascii=False,
@@ -62,13 +63,24 @@ def save_experiment_result(
 
     _write_json_atomic(
         output_path / CONFIG_FILE,
-        result.config.model_dump(mode="json"),
+        experiment_config_payload(result.config),
     )
     _write_json_atomic(
         output_path / RESULT_FILE,
         _result_payload(result),
     )
     return result
+
+
+def experiment_config_payload(config: ExperimentConfig) -> dict[str, Any]:
+    """Return a persistable experiment config including runtime chunk options."""
+    return {
+        "parsing": config.parsing.model_dump(mode="json"),
+        "chunking": chunking_config_payload(config.chunking),
+        "indexing": config.indexing.model_dump(mode="json"),
+        "retrieval": config.retrieval.model_dump(mode="json"),
+        "evaluation": config.evaluation.model_dump(mode="json"),
+    }
 
 
 def _result_payload(result: ExperimentResult) -> dict[str, Any]:

@@ -2,8 +2,16 @@
 
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    StrictInt,
+    field_validator,
+)
 
 
 class ChunkingConfig(BaseModel):
@@ -13,6 +21,8 @@ class ChunkingConfig(BaseModel):
 
     chunker_name: str
     options: dict[str, Any] = Field(default_factory=dict)
+    cache_key: str | None = None
+    _runtime_cache_nonce: str = PrivateAttr(default_factory=lambda: uuid4().hex)
 
     @field_validator("chunker_name")
     @classmethod
@@ -23,6 +33,16 @@ class ChunkingConfig(BaseModel):
         if not normalized:
             raise ValueError("chunker_name must not be empty.")
 
+        return normalized
+
+    @field_validator("cache_key")
+    @classmethod
+    def validate_cache_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("cache_key must not be empty.")
         return normalized
 
 

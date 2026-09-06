@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import warnings
 from collections.abc import Iterable
+from dataclasses import fields, is_dataclass
+from enum import Enum
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -191,9 +196,137 @@ def _configuration_payload(
         raise ValueError("parsing_config_hash must be a non-empty string.")
 
     return {
-        "chunking_config": config.model_dump(mode="json"),
+        "chunking_config": chunking_config_payload(config),
         "parsing_config_hash": parsing_config_hash,
     }
+
+
+def chunking_config_payload(config: ChunkingConfig) -> dict[str, Any]:
+    """Return a stable persisted representation of runtime chunker options."""
+    normalized_options, reusable = _normalize_cache_value(
+        config.options,
+        cache_key=config.cache_key,
+        runtime_nonce=config._runtime_cache_nonce,
+    )
+    if not reusable:
+        warnings.warn(
+            "Chunking options contain objects without a stable serializer or "
+            "cache_key; cross-run cache reuse is disabled for this configuration.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    return {
+        "chunker_name": config.chunker_name,
+        "options": normalized_options,
+        "cache_key": config.cache_key,
+    }
+
+
+def _normalize_cache_value(
+    value: Any,
+    *,
+    cache_key: str | None,
+    runtime_nonce: str,
+) -> tuple[Any, bool]:
+    if value is None or isinstance(value, (str, bool, int)):
+        return value, True
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value, True
+        return _unknown_cache_value(value, cache_key, runtime_nonce)
+    if isinstance(value, Enum):
+        return _normalize_cache_value(
+            value.value,
+            cache_key=cache_key,
+            runtime_nonce=runtime_nonce,
+        )
+    if isinstance(value, (list, tuple)):
+        return _normalize_cache_sequence(value, cache_key, runtime_nonce)
+    if isinstance(value, dict) and all(
+        isinstance(key, str) for key in value
+    ):
+        normalized: dict[str, Any] = {}
+        reusable = True
+        for key in sorted(value):
+            normalized[key], item_reusable = _normalize_cache_value(
+                value[key],
+                cache_key=cache_key,
+                runtime_nonce=runtime_nonce,
+            )
+            reusable = reusable and item_reusable
+        return normalized, reusable
+    if _is_known_chonkie_rule(value):
+        normalized_fields: dict[str, Any] = {}
+        reusable = True
+        for field in fields(value):
+            normalized_fields[field.name], item_reusable = _normalize_cache_value(
+                getattr(value, field.name),
+                cache_key=cache_key,
+                runtime_nonce=runtime_nonce,
+            )
+            reusable = reusable and item_reusable
+        return {
+            "__type__": _qualified_type_name(value),
+            "__chonkie_version__": _chonkie_version(),
+            "fields": normalized_fields,
+        }, reusable
+    return _unknown_cache_value(value, cache_key, runtime_nonce)
+
+
+def _normalize_cache_sequence(
+    value: list[Any] | tuple[Any, ...],
+    cache_key: str | None,
+    runtime_nonce: str,
+) -> tuple[list[Any], bool]:
+    normalized = []
+    reusable = True
+    for item in value:
+        normalized_item, item_reusable = _normalize_cache_value(
+            item,
+            cache_key=cache_key,
+            runtime_nonce=runtime_nonce,
+        )
+        normalized.append(normalized_item)
+        reusable = reusable and item_reusable
+    return normalized, reusable
+
+
+def _unknown_cache_value(
+    value: Any,
+    cache_key: str | None,
+    runtime_nonce: str,
+) -> tuple[dict[str, str], bool]:
+    if cache_key is not None:
+        return {
+            "__type__": _qualified_type_name(value),
+            "__cache_key__": cache_key,
+        }, True
+    return {
+        "__type__": _qualified_type_name(value),
+        "__runtime_nonce__": runtime_nonce,
+    }, False
+
+
+def _is_known_chonkie_rule(value: Any) -> bool:
+    value_type = type(value)
+    return (
+        is_dataclass(value)
+        and not isinstance(value, type)
+        and value_type.__module__.startswith("chonkie")
+        and value_type.__name__ in {"RecursiveLevel", "RecursiveRules"}
+    )
+
+
+def _qualified_type_name(value: Any) -> str:
+    value_type = type(value)
+    return f"{value_type.__module__}.{value_type.__qualname__}"
+
+
+def _chonkie_version() -> str | None:
+    try:
+        return version("chonkie")
+    except PackageNotFoundError:
+        return None
 
 
 def _validate_and_sort_chunks(

@@ -297,18 +297,225 @@ def test_chonkie_adapter_normalizes_native_offsets(monkeypatch) -> None:
     assert chunks[0].metadata["token_count"] == 4
 
 
-def test_chonkie_rejects_unknown_options() -> None:
-    with pytest.raises(ValueError, match="Unsupported options"):
-        ChonkieChunker.validate_config(
-            ChunkingConfig(
+def test_chonkie_accepts_non_serializable_runtime_options() -> None:
+    callback = object()
+
+    ChonkieChunker.validate_config(
+        ChunkingConfig(
+            chunker_name="token",
+            options={"callback": callback},
+        )
+    )
+
+
+def test_non_serializable_options_disable_cross_run_cache_reuse() -> None:
+    first = ChunkingConfig(
+        chunker_name="token",
+        options={"callback": object()},
+    )
+    second = ChunkingConfig(
+        chunker_name="token",
+        options={"callback": object()},
+    )
+
+    with pytest.warns(RuntimeWarning, match="cache reuse is disabled"):
+        first_hash = chunking_configuration_hash(first, "parse-a")
+    with pytest.warns(RuntimeWarning, match="cache reuse is disabled"):
+        second_hash = chunking_configuration_hash(second, "parse-a")
+
+    with pytest.warns(RuntimeWarning, match="cache reuse is disabled"):
+        repeated_first_hash = chunking_configuration_hash(first, "parse-a")
+
+    assert first_hash == repeated_first_hash
+    assert first_hash != second_hash
+
+
+def test_cache_key_enables_stable_identity_for_runtime_objects() -> None:
+    first = ChunkingConfig(
+        chunker_name="token",
+        options={"callback": object()},
+        cache_key="callback-v1",
+    )
+    second = ChunkingConfig(
+        chunker_name="token",
+        options={"callback": object()},
+        cache_key="callback-v1",
+    )
+
+    assert chunking_configuration_hash(
+        first,
+        "parse-a",
+    ) == chunking_configuration_hash(second, "parse-a")
+
+
+def test_known_chonkie_rules_receive_stable_cache_identity() -> None:
+    @dataclass
+    class RecursiveLevel:
+        delimiters: list[str]
+        whitespace: bool = False
+
+    @dataclass
+    class RecursiveRules:
+        rules: list[RecursiveLevel]
+
+    RecursiveLevel.__module__ = "chonkie.types"
+    RecursiveRules.__module__ = "chonkie.types"
+
+    first = ChunkingConfig(
+        chunker_name="recursive",
+        options={
+            "rules": RecursiveRules([RecursiveLevel(["\n\n", ". "])])
+        },
+    )
+    second = ChunkingConfig(
+        chunker_name="recursive",
+        options={
+            "rules": RecursiveRules([RecursiveLevel(["\n\n", ". "])])
+        },
+    )
+
+    assert chunking_configuration_hash(
+        first,
+        "parse-a",
+    ) == chunking_configuration_hash(second, "parse-a")
+
+
+def test_describe_chunker_inspects_runtime_options(monkeypatch) -> None:
+    from ragit.chunking import describe_chunker, list_chunker_options
+
+    class FakeSemanticChunker:
+        def __init__(
+            self,
+            embedding_model: str = "fake/model",
+            threshold: float = 0.8,
+            **kwargs,
+        ) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "ragit.chunking.chonkie._load_chonkie_chunker_class",
+        lambda chunker_name: FakeSemanticChunker,
+    )
+
+    description = describe_chunker("semantic")
+
+    assert description["options"]["embedding_model"]["default"] == "fake/model"
+    assert description["options"]["threshold"]["default"] == 0.8
+    assert description["accepts_additional_options"] is True
+    assert description["documentation"].endswith("/semantic-chunker")
+    assert list_chunker_options("semantic") == description["options"]
+
+
+def test_invalid_chonkie_options_include_discovery_guidance(monkeypatch) -> None:
+    from ragit.chunking import ChunkerConfigurationError, chunk_document
+
+    class RejectingChunker:
+        def __init__(self, **options) -> None:
+            raise TypeError("unexpected keyword argument 'bad_option'")
+
+    monkeypatch.setattr(
+        "ragit.chunking.chonkie._load_chonkie_chunker_class",
+        lambda chunker_name: RejectingChunker,
+    )
+    pages = [
+        _parsed_page(
+            page_id=10,
+            page_number=0,
+            content="abc",
+            status=PageStatus.SUCCESS,
+        )
+    ]
+
+    with pytest.raises(
+        ChunkerConfigurationError,
+        match=r"describe_chunker\('token'\)",
+    ):
+        chunk_document(
+            parsed_pages=pages,
+            config=ChunkingConfig(
                 chunker_name="token",
-                options={"not_a_real_option": True},
-            )
+                options={"bad_option": True},
+            ),
         )
 
 
-def test_public_api_resolves_registered_chunker(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("chunker_name", "options"),
+    [
+        ("token", {"chunk_size": 10}),
+        ("sentence", {"chunk_size": 10}),
+        ("recursive", {"chunk_size": 10}),
+        ("fast", {"chunk_size": 10}),
+        ("semantic", {"chunk_size": 10}),
+        (
+            "late",
+            {"chunk_size": 10, "embedding_model": "fake/late-model"},
+        ),
+        ("neural", {"min_characters_per_chunk": 1}),
+    ],
+)
+def test_public_api_resolves_all_registered_chonkie_chunkers(
+    monkeypatch,
+    chunker_name,
+    options,
+) -> None:
     from ragit.chunking import chunk_document
+
+    @dataclass
+    class NativeChunk:
+        text: str
+        start_index: int
+        end_index: int
+        token_count: int
+        embedding: list[float] | None = None
+
+    class FakeChonkieChunker:
+        def __init__(self, **options) -> None:
+            self.options = options
+
+        def chunk(self, text: str) -> list[NativeChunk]:
+            return [
+                NativeChunk(
+                    text=text,
+                    start_index=0,
+                    end_index=len(text),
+                    token_count=len(text),
+                    embedding=[1.0, 0.0] if chunker_name == "late" else None,
+                )
+            ]
+
+    monkeypatch.setattr(
+        "ragit.chunking.chonkie._load_chonkie_chunker_class",
+        lambda selected_name: FakeChonkieChunker,
+    )
+
+    pages = [
+        _parsed_page(
+            page_id=10,
+            page_number=0,
+            content="abc",
+            status=PageStatus.SUCCESS,
+        )
+    ]
+
+    chunks = chunk_document(
+        parsed_pages=pages,
+        config=ChunkingConfig(
+            chunker_name=chunker_name,
+            options=options,
+        ),
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].content == "abc"
+    assert chunks[0].page_ids == [10]
+    assert chunks[0].metadata["chunker_name"] == chunker_name
+
+
+def test_public_api_passes_options_to_selected_chonkie_chunker(monkeypatch) -> None:
+    from ragit.chunking import chunk_document
+
+    received_options = {}
 
     @dataclass
     class NativeChunk:
@@ -319,7 +526,7 @@ def test_public_api_resolves_registered_chunker(monkeypatch) -> None:
 
     class FakeTokenChunker:
         def __init__(self, **options) -> None:
-            self.options = options
+            received_options.update(options)
 
         def chunk(self, text: str) -> list[NativeChunk]:
             return [
@@ -349,35 +556,12 @@ def test_public_api_resolves_registered_chunker(monkeypatch) -> None:
         parsed_pages=pages,
         config=ChunkingConfig(
             chunker_name="token",
-            options={"chunk_size": 10},
+            options={"future_chonkie_option": True},
         ),
     )
 
+    assert received_options == {"future_chonkie_option": True}
     assert len(chunks) == 1
-    assert chunks[0].content == "abc"
-    assert chunks[0].page_ids == [10]
-
-
-def test_public_api_rejects_options_for_selected_chunker() -> None:
-    from ragit.chunking import chunk_document
-
-    pages = [
-        _parsed_page(
-            page_id=10,
-            page_number=0,
-            content="abc",
-            status=PageStatus.SUCCESS,
-        )
-    ]
-
-    with pytest.raises(ValueError, match="Unsupported options"):
-        chunk_document(
-            parsed_pages=pages,
-            config=ChunkingConfig(
-                chunker_name="token",
-                options={"min_characters_per_chunk": 24},
-            ),
-        )
 
 
 def test_custom_registered_chunker_uses_same_public_api() -> None:
@@ -432,6 +616,72 @@ def test_custom_registered_chunker_uses_same_public_api() -> None:
 
     assert chunks[0].content == "abc"
     assert chunks[0].page_ids == [42]
+
+
+def test_function_chunker_maps_text_and_preserves_options() -> None:
+    from ragit.chunking import chunk_document, chunker
+
+    received_options = {}
+
+    @chunker("test_paragraph_function")
+    def split_paragraphs(text, options):
+        received_options.update(options)
+        return text.split("\n\n")
+
+    chunks = chunk_document(
+        parsed_pages=[
+            _parsed_page(
+                page_id=10,
+                page_number=0,
+                content="first paragraph\n\nsecond paragraph",
+                status=PageStatus.SUCCESS,
+            )
+        ],
+        config=ChunkingConfig(
+            chunker_name="test_paragraph_function",
+            options={"minimum_length": 5},
+        ),
+    )
+
+    assert received_options == {"minimum_length": 5}
+    assert [item.content for item in chunks] == [
+        "first paragraph",
+        "second paragraph",
+    ]
+    assert [item.page_ids for item in chunks] == [[10], [10]]
+
+
+def test_function_chunker_accepts_explicit_spans_and_metadata() -> None:
+    from ragit.chunking import ChunkSpan, chunk_document, chunker
+
+    @chunker("test_explicit_span_function")
+    def select_span(text, options):
+        return [
+            ChunkSpan(
+                content=text[2:5],
+                start_index=2,
+                end_index=5,
+                metadata={"section": options["section"]},
+            )
+        ]
+
+    chunks = chunk_document(
+        parsed_pages=[
+            _parsed_page(
+                page_id=10,
+                page_number=0,
+                content="abcdef",
+                status=PageStatus.SUCCESS,
+            )
+        ],
+        config=ChunkingConfig(
+            chunker_name="test_explicit_span_function",
+            options={"section": "middle"},
+        ),
+    )
+
+    assert chunks[0].content == "cde"
+    assert chunks[0].metadata == {"section": "middle"}
 
 
 def test_public_api_rejects_unknown_chunker() -> None:

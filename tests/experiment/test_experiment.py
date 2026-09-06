@@ -65,6 +65,20 @@ def test_experiment_hash_is_deterministic() -> None:
     )
 
 
+def test_experiment_hash_supports_runtime_chunking_objects() -> None:
+    first = _config()
+    first.chunking.options["callback"] = object()
+    first.chunking.cache_key = "callback-v1"
+
+    second = _config()
+    second.chunking.options["callback"] = object()
+    second.chunking.cache_key = "callback-v1"
+
+    assert experiment_configuration_hash(first) == experiment_configuration_hash(
+        second
+    )
+
+
 @pytest.mark.parametrize(
     ("stage", "updates"),
     [

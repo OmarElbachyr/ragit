@@ -3,6 +3,8 @@
 from collections import Counter
 from pathlib import Path
 
+import torch
+
 from ragit.chunking import (
     ChunkingConfig,
     chunk_document,
@@ -51,12 +53,20 @@ print(f"Success: {statuses['success']}")
 print(f"Empty:   {statuses['empty']}")
 print(f"Failed:  {statuses['failed']}")
 
+if not torch.cuda.is_available():
+    raise RuntimeError("This script requires a CUDA-capable GPU.")
+
 chunking_config = ChunkingConfig(
-    chunker_name="page",
-    options={},
+    chunker_name="late",
+    options={
+        "embedding_model": "nomic-ai/modernbert-embed-base",
+        "chunk_size": 512,
+        "device": "cuda",
+    },
 )
 
 print("\nStarting document-level chunking...\n")
+print(f"GPU: {torch.cuda.get_device_name(0)}")
 
 chunks = chunk_document(
     parsed_pages=parsed_pages,

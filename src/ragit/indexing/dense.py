@@ -12,7 +12,6 @@ from ragit.chunking.models import Chunk, ChunkingResult
 from ragit.data.models import Collection
 from ragit.indexing.models import DenseIndexResult, IndexedChunk, IndexingConfig
 from ragit.indexing.storage import (
-    indexing_output_path,
     load_dense_index as _load_dense_index,
     save_dense_index,
 )
@@ -95,16 +94,9 @@ def _build_dense_index(
     """Internal dense builder using explicit storage/provenance arguments."""
     validate_dense_config(config)
 
-    output_path = indexing_output_path(
-        pdfs_path=pdfs_path,
-        config=config,
-        chunking_config_hash=chunking_config_hash,
-    )
     normalized_chunks = validate_chunks(chunks)
     if not normalized_chunks:
-        raise IndexingConfigurationError(
-            "Dense indexing requires at least one chunk."
-        )
+        raise IndexingConfigurationError("Dense indexing requires at least one chunk.")
 
     if encoder is None:
         encoder = _load_encoder(config)
@@ -151,31 +143,38 @@ def _encode_chunks(
     expected_dimension: int,
 ) -> np.ndarray:
     """Encode chunks, enforce dense shape/float32, and L2-normalize."""
-    texts = [chunk.content for chunk in chunks]
-    options = config.options
+    precomputed = _precomputed_late_embeddings(
+        chunks=chunks,
+        model_name=config.model_name,
+    )
+    if precomputed is not None:
+        embeddings = precomputed
+    else:
+        texts = [chunk.content for chunk in chunks]
+        options = config.options
 
-    encode_kwargs = {
-        "batch_size": options.get("batch_size", 32),
-        "show_progress_bar": options.get("show_progress_bar", False),
-        "convert_to_numpy": True,
-        "normalize_embeddings": False,
-    }
+        encode_kwargs = {
+            "batch_size": options.get("batch_size", 32),
+            "show_progress_bar": options.get("show_progress_bar", False),
+            "convert_to_numpy": True,
+            "normalize_embeddings": False,
+        }
 
-    try:
-        raw_embeddings = encoder.encode(texts, **encode_kwargs)
-    except TypeError as error:
-        raise IndexingConfigurationError(
-            f"Model {config.model_name!r} does not provide a compatible "
-            "SentenceTransformer-style encode() interface."
-        ) from error
+        try:
+            raw_embeddings = encoder.encode(texts, **encode_kwargs)
+        except TypeError as error:
+            raise IndexingConfigurationError(
+                f"Model {config.model_name!r} does not provide a compatible "
+                "SentenceTransformer-style encode() interface."
+            ) from error
 
-    try:
-        embeddings = np.asarray(raw_embeddings)
-    except (TypeError, ValueError) as error:
-        raise IndexingConfigurationError(
-            f"Model {config.model_name!r} did not return a rectangular "
-            "single-vector embedding matrix."
-        ) from error
+        try:
+            embeddings = np.asarray(raw_embeddings)
+        except (TypeError, ValueError) as error:
+            raise IndexingConfigurationError(
+                f"Model {config.model_name!r} did not return a rectangular "
+                "single-vector embedding matrix."
+            ) from error
 
     if embeddings.ndim != 2 or embeddings.shape[0] != len(chunks):
         raise IndexingConfigurationError(
@@ -205,6 +204,46 @@ def _encode_chunks(
     return np.ascontiguousarray(embeddings, dtype=np.float32)
 
 
+def _precomputed_late_embeddings(
+    *,
+    chunks: list[Chunk],
+    model_name: str,
+) -> np.ndarray | None:
+    """Use LateChunker embeddings without discarding their document context."""
+    late_chunks = [
+        chunk for chunk in chunks if chunk.metadata.get("chunker_name") == "late"
+    ]
+    if not late_chunks:
+        return None
+    if len(late_chunks) != len(chunks):
+        raise IndexingConfigurationError(
+            "LateChunker embeddings cannot be mixed with other chunk types."
+        )
+
+    embedding_models = {
+        chunk.metadata["embedding_model"]
+        for chunk in chunks
+        if chunk.metadata.get("embedding_model") is not None
+    }
+    if embedding_models and embedding_models != {model_name}:
+        raise IndexingConfigurationError(
+            "Dense indexing of LateChunker output must use the same model as "
+            "late chunking."
+        )
+
+    raw = [chunk.metadata.get("embedding") for chunk in chunks]
+    if any(embedding is None for embedding in raw):
+        raise IndexingConfigurationError(
+            "LateChunker output is missing its context-aware embeddings."
+        )
+    try:
+        return np.asarray(raw, dtype=np.float32)
+    except (TypeError, ValueError) as error:
+        raise IndexingConfigurationError(
+            "LateChunker output contains invalid context-aware embeddings."
+        ) from error
+
+
 def _load_encoder(config: IndexingConfig) -> Any:
     """Load the configured dense model through Sentence Transformers."""
     try:
@@ -228,7 +267,5 @@ def _import_faiss() -> Any:
     try:
         import faiss
     except ImportError as error:
-        raise ImportError(
-            "faiss-cpu is required for dense RAGit indexing."
-        ) from error
+        raise ImportError("faiss-cpu is required for dense RAGit indexing.") from error
     return faiss

@@ -4,6 +4,7 @@ site_description: Page-level retrieval evaluation for document preprocessing con
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Chunking: chunking.md
   - Dataset format: dataset-format.md
   - Benchmarking: benchmark.md
   - Extending RAGit: extending-ragit.md
