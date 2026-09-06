@@ -7,7 +7,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 
 dependencies = [
-  "chonkie",
+  "chonkie[neural,semantic,st]>=1.6.5,<2",
   "faiss-cpu",
   "ir-measures",
   "tabulate",
