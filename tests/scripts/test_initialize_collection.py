@@ -5,7 +5,7 @@ from pathlib import Path
 from ragit.data import initialize_collection
 
 
-DATA_PATH = Path("data/vidore_v3_finance_en")
+DATA_PATH = Path("data/experiments_bench")
 PDFS_PATH = DATA_PATH / "pdfs"
 
 CORPUS_PATH = DATA_PATH / "corpus.jsonl"

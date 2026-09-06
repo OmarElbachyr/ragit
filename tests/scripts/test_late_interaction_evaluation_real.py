@@ -10,7 +10,7 @@ from ragit.parsing import ParsingConfig, parse_document
 from ragit.retrieval import retrieve
 
 
-DATA_PATH = Path("data/vidore_v3_finance_en")
+DATA_PATH = Path("data/experiments_bench")
 PDFS_PATH = DATA_PATH / "pdfs"
 
 TOP_K = 20

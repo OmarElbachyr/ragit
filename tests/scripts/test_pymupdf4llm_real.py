@@ -7,7 +7,7 @@ from ragit.data import initialize_collection
 from ragit.parsing import ParsingConfig, parse_document
 
 
-DATA_PATH = Path("data/vidore_v3_finance_en")
+DATA_PATH = Path("data/experiments_bench")
 PDFS_PATH = DATA_PATH / "pdfs"
 
 collection = initialize_collection(
