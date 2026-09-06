@@ -19,7 +19,8 @@ PDFs
 Current capabilities include:
 
 - canonical local collections with optional queries and page-level relevance judgments;
-- Docling and PyMuPDF4LLM parser adapters;
+- Docling, Marker, and PyMuPDF4LLM parser adapters, with OCR and Docling
+  picture descriptions;
 - native page chunking plus Chonkie token, sentence, recursive, fast,
   semantic, late, and neural strategies;
 - FAISS dense indexes and PyLate late-interaction indexes;
@@ -40,6 +41,12 @@ Install a parser-specific extra when needed, for example:
 
 ```bash
 pip install -e '.[docling]'
+```
+
+For Marker parsing:
+
+```bash
+pip install -e '.[marker]'
 ```
 
 ## Getting started

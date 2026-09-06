@@ -467,6 +467,67 @@ def test_use_ocr_forces_full_page_ocr(
     )
 
 
+def test_describe_pictures_enables_enrichment_and_export(
+    document: Document,
+    source_pages: list[Page],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    docling_document = MockDoclingDocument(
+        {
+            1: "Text\n\nA chart showing quarterly revenue.",
+        }
+    )
+    captured_options = {}
+
+    def build_converter(effective_options):
+        captured_options.update(effective_options)
+        return MockConverter(docling_document)
+
+    monkeypatch.setattr(
+        parser_module,
+        "_build_converter",
+        build_converter,
+    )
+    monkeypatch.setattr(
+        parser_module,
+        "_get_docling_version",
+        lambda: "1.0",
+    )
+
+    config = ParsingConfig(
+        parser_name="docling",
+        output_format="markdown",
+        options={"describe_pictures": True},
+    )
+
+    page = DoclingParser().parse_document(
+        document,
+        source_pages[:1],
+        config,
+    )[0]
+
+    assert captured_options["do_picture_description"] is True
+    assert docling_document.markdown_calls == [(1, True)]
+    assert "quarterly revenue" in page.content
+
+
+def test_describe_pictures_cannot_be_combined_with_vlm() -> None:
+    config = ParsingConfig(
+        parser_name="docling",
+        output_format="text",
+        options={
+            "describe_pictures": True,
+            "use_vlm": True,
+        },
+    )
+
+    with pytest.raises(
+        ParsingConfigurationError,
+        match="mutually exclusive",
+    ):
+        DoclingParser.validate_config(config)
+
+
 def test_rejects_unsupported_option() -> None:
     config = ParsingConfig(
         parser_name="docling",

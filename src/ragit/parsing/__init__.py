@@ -14,6 +14,7 @@ from ragit.parsing.models import (
 )
 from ragit.parsing.parsers import (
     DoclingParser,
+    MarkerParser,
     PyMuPDF4LLMParser,
 )
 from ragit.parsing.registry import (
@@ -36,6 +37,7 @@ __all__ = [
     "BaseParser",
     "ContentFormat",
     "DoclingParser",
+    "MarkerParser",
     "PageStatus",
     "ParsedPage",
     "ParserRegistryError",

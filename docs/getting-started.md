@@ -12,6 +12,29 @@ Install the `docling` extra if you want to use the Docling parser:
 pip install -e '.[docling]'
 ```
 
+Or install the `marker` extra for the Marker parser:
+
+```bash
+pip install -e '.[marker]'
+```
+
+The Marker extra includes vLLM for local open-source picture descriptions.
+See [Marker](marker.md) for server startup and model selection.
+
+```python
+ParsingConfig(
+    parser_name="docling",
+    output_format="markdown",
+    options={
+        "use_ocr": True,
+        "describe_pictures": True,
+    },
+)
+```
+
+See [Parsing](parsing.md) for parser capabilities, option semantics, and
+additional configurations.
+
 ## Initialize a collection
 
 At minimum, place one or more PDFs in a directory:

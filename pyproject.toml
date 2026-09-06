@@ -7,27 +7,27 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 
 dependencies = [
-  "chonkie[neural,semantic,st]>=1.6.5,<2",
-  "faiss-cpu",
-  "ir-measures",
-  "tabulate",
-  "pydantic",
-  "pymupdf",
-  "pypdf",
-  "pymupdf4llm",
-  "pyyaml",
-  "pillow",
+  "chonkie[neural,semantic,st]==1.7.0",
+  "faiss-cpu==1.15.0",
+  "ir-measures==0.4.3",
+  "tabulate==0.10.0",
+  "pydantic==2.13.4",
+  "pymupdf==1.28.0",
+  "pypdf==6.14.2",
+  "pymupdf4llm==1.28.0",
+  "pyyaml==6.0.3",
+  "pillow==10.4.0",
   "torch==2.11.0",
   "torchvision==0.26.0",
   "pylate==1.6.0",
   "fast-plaid==1.4.6.2110",
-  "transformers>=4.51,<5",
+  "transformers==4.57.6",
 ]
 
 [project.optional-dependencies]
 docling = [
-  "docling",
-  "easyocr",
+  "docling==2.118.0",
+  "easyocr==1.7.2",
 ]
 
 unstructured = [
@@ -35,7 +35,8 @@ unstructured = [
 ]
 
 marker = [
-  "marker-pdf",
+  "marker-pdf==1.10.2",
+  "vllm==0.20.2"
 ]
 
 docs = [
@@ -43,15 +44,15 @@ docs = [
 ]
 
 dev = [
-  "pytest",
-  "ruff",
+  "pytest==9.1.1",
+  "ruff==0.16.1",
 ]
 
 all = [
-  "docling",
-  "easyocr",
+  "docling==2.118.0",
+  "easyocr==1.7.2",
   "unstructured[pdf]",
-  "marker-pdf",
+  "marker-pdf==1.10.2",
 ]
 
 [tool.hatch.build.targets.wheel]

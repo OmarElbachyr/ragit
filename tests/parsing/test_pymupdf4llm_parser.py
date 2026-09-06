@@ -307,5 +307,19 @@ def test_rejects_unsupported_options() -> None:
         PyMuPDF4LLMParser.validate_config(config)
 
 
+def test_rejects_picture_descriptions() -> None:
+    config = ParsingConfig(
+        parser_name="pymupdf4llm",
+        output_format="text",
+        options={"describe_pictures": True},
+    )
+
+    with pytest.raises(
+        ParsingConfigurationError,
+        match="Unsupported options",
+    ):
+        PyMuPDF4LLMParser.validate_config(config)
+
+
 def test_parser_is_registered() -> None:
     assert get_parser("pymupdf4llm") is PyMuPDF4LLMParser

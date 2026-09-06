@@ -79,6 +79,7 @@ class DoclingParser(BaseParser):
         {
             "use_ocr",
             "use_vlm",
+            "describe_pictures",
         }
     )
 
@@ -92,6 +93,10 @@ class DoclingParser(BaseParser):
 
         use_ocr = config.options.get("use_ocr", False)
         use_vlm = config.options.get("use_vlm", False)
+        describe_pictures = config.options.get(
+            "describe_pictures",
+            False,
+        )
 
         if not isinstance(use_ocr, bool):
             raise ParsingConfigurationError(
@@ -103,9 +108,20 @@ class DoclingParser(BaseParser):
                 "Option 'use_vlm' must be a Boolean."
             )
 
+        if not isinstance(describe_pictures, bool):
+            raise ParsingConfigurationError(
+                "Option 'describe_pictures' must be a Boolean."
+            )
+
         if use_ocr and use_vlm:
             raise ParsingConfigurationError(
                 "Options 'use_ocr' and 'use_vlm' are mutually exclusive."
+            )
+
+        if describe_pictures and use_vlm:
+            raise ParsingConfigurationError(
+                "Options 'describe_pictures' and 'use_vlm' are mutually "
+                "exclusive."
             )
 
     @classmethod
@@ -157,6 +173,10 @@ class DoclingParser(BaseParser):
         )
 
         use_ocr = parsing_mode == "ocr"
+        describe_pictures = config.options.get(
+            "describe_pictures",
+            False,
+        )
 
         return {
             **_STANDARD_DEFAULTS,
@@ -172,6 +192,7 @@ class DoclingParser(BaseParser):
                 else "default"
             ),
             "ocr_language": [ocr_language],
+            "do_picture_description": describe_pictures,
         }
 
     def parse_document(
@@ -286,6 +307,9 @@ class DoclingParser(BaseParser):
                 parsing_mode=effective_options[
                     "parsing_mode"
                 ],
+                describe_pictures=effective_options[
+                    "do_picture_description"
+                ],
             )
 
             if not isinstance(content, str):
@@ -342,11 +366,15 @@ class DoclingParser(BaseParser):
         docling_page_number: int,
         output_format: ContentFormat,
         parsing_mode: str,
+        describe_pictures: bool,
     ) -> str:
         """Use Docling's native page export method."""
-        # Full-page OCR output may be stored below
-        # a picture item.
-        traverse_pictures = parsing_mode == "ocr"
+        # Full-page OCR output and generated picture descriptions may be
+        # stored below picture items.
+        traverse_pictures = (
+            parsing_mode == "ocr"
+            or describe_pictures
+        )
 
         if output_format == "markdown":
             return (
