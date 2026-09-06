@@ -20,7 +20,8 @@ Current capabilities include:
 
 - canonical local collections with optional queries and page-level relevance judgments;
 - Docling and PyMuPDF4LLM parser adapters;
-- native page chunking and Chonkie-backed chunking strategies;
+- native page chunking plus Chonkie token, sentence, recursive, fast,
+  semantic, late, and neural strategies;
 - FAISS dense indexes and PyLate late-interaction indexes;
 - chunk-to-page score aggregation and evaluation with `ir-measures`;
 - persisted, content-addressed artifacts under each collection's `.ragit/`
@@ -55,6 +56,8 @@ For an evaluated collection, pass `corpus.jsonl`, `documents_metadata.jsonl`,
 `queries.jsonl`, and `qrels.tsv` when initializing it. See the
 [getting-started guide](docs/getting-started.md) for a complete experiment and
 [dataset format](docs/dataset-format.md) for the expected records.
+See [Chunking](docs/chunking.md) for supported strategies, runtime option
+discovery, official Chonkie references, and example configurations.
 
 ## Project status
 
